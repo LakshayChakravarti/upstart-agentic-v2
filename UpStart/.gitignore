@@ -1,0 +1,22 @@
+# dependencies
+node_modules/
+
+# env files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+*.env
+
+# next.js
+.next/
+out/
+build/
+
+# misc
+.DS_Store
+*.log
+
+# skill lock
+skills-lock.json

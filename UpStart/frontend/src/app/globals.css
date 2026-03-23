@@ -1,0 +1,711 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  /* Neo-Brutalism Palette */
+  --color-bg: #FAFAFA;
+  /* Off white background */
+  --color-surface: #FFFFFF;
+  --color-primary: #FDE047;
+  /* Vibrant Yellow */
+  --color-secondary: #3B82F6;
+  /* Bright Blue */
+  --color-accent: #F472B6;
+  /* Bright Pink */
+  --color-emerald: #4ADE80;
+  /* Lime Green */
+
+  /* High contrast text */
+  --color-text-1: #000000;
+  --color-text-2: #171717;
+  --color-text-3: #404040;
+
+  --color-border: #000000;
+  --color-error: #EF4444;
+  /* Bright Red */
+  --color-warning: #F97316;
+  /* Bright Orange */
+
+  --border-width: 4px;
+  --shadow-color: #000000;
+  --shadow-offset: 6px;
+  --border-radius: 0px;
+  /* Sharp corners for pure brutalism */
+}
+
+body {
+  color: var(--color-text-1);
+  background-color: var(--color-bg);
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.05) 2px, transparent 2px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 2px, transparent 2px);
+  background-size: 32px 32px;
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  position: relative;
+}
+
+/* Comic book / print halftone dot effect overlay */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: radial-gradient(rgba(0, 0, 0, 0.1) 1px, transparent 1px);
+  background-size: 8px 8px;
+  pointer-events: none;
+  z-index: -1;
+}
+
+::selection {
+  background: var(--color-primary);
+  color: var(--color-text-1);
+}
+
+::-webkit-scrollbar {
+  width: 14px;
+  height: 14px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg);
+  border-left: var(--border-width) solid var(--color-border);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-secondary);
+  border: 2px solid var(--color-border);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-accent);
+}
+
+/* Base Utility Classes for Neo-Brutalism */
+
+.section-card {
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  box-shadow: var(--shadow-offset) var(--shadow-offset) 0px 0px var(--shadow-color);
+  padding: 24px;
+  border-radius: var(--border-radius);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.section-card-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: var(--border-width) solid var(--color-border);
+}
+
+.section-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--border-radius);
+  background: var(--color-primary);
+  border: var(--border-width) solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+}
+
+.btn-primary {
+  background: var(--color-primary);
+  color: #000000;
+  border: var(--border-width) solid var(--color-border);
+  box-shadow: 4px 4px 0px 0px var(--shadow-color);
+  padding: 12px 24px;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  transition: all 0.1s ease;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px var(--shadow-color);
+}
+
+.btn-primary:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0px 0px 0px 0px var(--shadow-color);
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: 4px 4px 0px 0px var(--shadow-color);
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: #000000;
+  border: var(--border-width) solid var(--color-border);
+  box-shadow: 4px 4px 0px 0px var(--shadow-color);
+  padding: 10px 20px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.1s ease;
+  border-radius: var(--border-radius);
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  background: #E5E7EB;
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px var(--shadow-color);
+}
+
+.btn-secondary:active {
+  transform: translate(4px, 4px);
+  box-shadow: 0px 0px 0px 0px var(--shadow-color);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.input-field {
+  width: 100%;
+  padding: 16px 20px;
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  color: var(--color-text-1);
+  font-size: 1.05rem;
+  font-weight: 700;
+  border-radius: var(--border-radius);
+  transition: all 0.1s ease;
+  box-shadow: 6px 6px 0px 0px var(--shadow-color);
+}
+
+.input-field:focus {
+  outline: none;
+  background: var(--color-surface);
+  transform: translate(-2px, -2px);
+  box-shadow: 8px 8px 0px 0px var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.input-label {
+  display: block;
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: var(--color-text-1);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.badge {
+  padding: 6px 12px;
+  border-radius: var(--border-radius);
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 2px solid var(--color-border);
+  box-shadow: 2px 2px 0px 0px var(--shadow-color);
+  color: #000000;
+}
+
+.badge-emerald {
+  background: var(--color-emerald);
+}
+
+.badge-blue {
+  background: var(--color-secondary);
+}
+
+.badge-amber {
+  background: var(--color-primary);
+}
+
+.badge-purple {
+  background: var(--color-accent);
+}
+
+.badge-rose {
+  background: var(--color-error);
+}
+
+.badge-high {
+  background: var(--color-emerald);
+}
+
+.badge-medium {
+  background: var(--color-primary);
+}
+
+.badge-low {
+  background: var(--color-warning);
+}
+
+.hover-pop-card {
+  transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  cursor: pointer;
+  transform-origin: center;
+}
+
+.hover-pop-card:hover {
+  transform: translate(-4px, -4px) rotate(-1.5deg) scale(1.02);
+  box-shadow: 10px 10px 0px 0px var(--shadow-color) !important;
+  background-color: var(--color-primary) !important;
+  z-index: 10;
+}
+
+.idea-card {
+  padding: 24px;
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius);
+  transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  cursor: pointer;
+  box-shadow: 8px 8px 0px 0px var(--shadow-color);
+  position: relative;
+  transform-origin: center;
+}
+
+.idea-card:hover {
+  background: #FEF08A;
+  transform: translate(-4px, -4px) rotate(-1deg) scale(1.02);
+  box-shadow: 12px 12px 0px 0px var(--shadow-color);
+  z-index: 10;
+}
+
+.idea-card.selected {
+  background: var(--color-primary) !important;
+  border-color: var(--color-border);
+  transform: translate(-2px, -2px) rotate(1deg) scale(1.02);
+  box-shadow: 10px 10px 0px 0px var(--shadow-color);
+  z-index: 10;
+}
+
+.strategy-card {
+  padding: 24px;
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius);
+  transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  cursor: pointer;
+  box-shadow: 8px 8px 0px 0px var(--shadow-color);
+  position: relative;
+  transform-origin: center;
+}
+
+.strategy-card:hover {
+  transform: translate(-4px, -4px) rotate(-1deg) scale(1.02);
+  box-shadow: 12px 12px 0px 0px var(--shadow-color);
+  background: #FEF9C3;
+  z-index: 10;
+}
+
+.strategy-card.selected {
+  background: var(--color-emerald) !important;
+  border-color: var(--color-border);
+  transform: translate(-2px, -2px) rotate(1deg) scale(1.02);
+  box-shadow: 10px 10px 0px 0px var(--shadow-color);
+  z-index: 10;
+}
+
+.week-card {
+  padding: 16px;
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius);
+  box-shadow: 4px 4px 0px 0px var(--shadow-color);
+}
+
+.highlight {
+  background-color: var(--color-primary);
+  color: #000000;
+  padding: 0px 8px;
+  border: var(--border-width) solid var(--color-border);
+  transform: rotate(-2deg);
+  display: inline-block;
+  box-shadow: 3px 3px 0px 0px var(--shadow-color);
+  border-radius: var(--border-radius);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  cursor: default;
+}
+
+.highlight:hover {
+  transform: rotate(1deg) scale(1.05);
+  box-shadow: 6px 6px 0px 0px var(--shadow-color);
+  background-color: var(--color-emerald);
+}
+
+.highlight-blue {
+  background-color: var(--color-secondary);
+  color: #000000;
+  padding: 0px 8px;
+  border: var(--border-width) solid var(--color-border);
+  transform: rotate(2deg);
+  display: inline-block;
+  box-shadow: 3px 3px 0px 0px var(--shadow-color);
+  border-radius: var(--border-radius);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  cursor: default;
+}
+
+.highlight-blue:hover {
+  transform: rotate(-1deg) scale(1.05);
+  box-shadow: 6px 6px 0px 0px var(--shadow-color);
+  background-color: var(--color-primary);
+}
+
+.highlight-pink {
+  background-color: var(--color-accent);
+  color: #000000;
+  padding: 0px 8px;
+  border: var(--border-width) solid var(--color-border);
+  transform: rotate(-1deg);
+  display: inline-block;
+  box-shadow: 3px 3px 0px 0px var(--shadow-color);
+  border-radius: var(--border-radius);
+  transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  cursor: default;
+}
+
+.highlight-pink:hover {
+  transform: rotate(2deg) scale(1.05);
+  box-shadow: 6px 6px 0px 0px var(--shadow-color);
+  background-color: var(--color-primary);
+}
+
+/* Brutalist Typography Styles */
+.brutalist-text-shadow {
+  text-shadow: 4px 4px 0px var(--color-accent);
+}
+
+.brutalist-text-shadow-blue {
+  text-shadow: 4px 4px 0px var(--color-secondary);
+}
+
+.brutalist-text-shadow-yellow {
+  text-shadow: 4px 4px 0px var(--color-primary);
+}
+
+/* Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes float {
+  0% {
+    transform: translateY(0px) rotate(0deg);
+  }
+
+  50% {
+    transform: translateY(-10px) rotate(1deg);
+  }
+
+  100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Spinner */
+.loading-spinner {
+  width: 24px;
+  height: 24px;
+  border: 4px solid var(--color-surface);
+  border-top: 4px solid var(--color-border);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  box-shadow: 2px 2px 0px 0px var(--shadow-color);
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* Progress Bar */
+.progress-bar {
+  height: 16px;
+  background: var(--color-surface);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--border-radius);
+  overflow: hidden;
+  position: relative;
+  box-shadow: 2px 2px 0px 0px var(--shadow-color);
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--color-primary);
+  border-right: var(--border-width) solid var(--color-border);
+  transition: width 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Print Styles */
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .section-card {
+    break-inside: avoid;
+    border: 2px solid black;
+    box-shadow: none;
+  }
+
+  .badge {
+    border: 1px solid black;
+    box-shadow: none;
+  }
+}
+
+/* Neo-Brutalism Scrolling Marquee */
+.marquee-wrapper {
+  width: 100%;
+  overflow: hidden;
+  background: var(--color-primary);
+  border-top: var(--border-width) solid var(--color-border);
+  border-bottom: var(--border-width) solid var(--color-border);
+  padding: 24px 0;
+  display: flex;
+  white-space: nowrap;
+}
+
+.marquee-content {
+  display: flex;
+  animation: scroll-marquee 30s linear infinite;
+  font-weight: 900;
+  font-size: clamp(1.5rem, 3vw, 2.5rem);
+  text-transform: uppercase;
+  color: var(--color-text-1);
+  letter-spacing: 0.08em;
+  will-change: transform;
+}
+
+.marquee-content span {
+  display: inline-block;
+  padding-right: 40px;
+}
+
+@keyframes scroll-marquee {
+  0% {
+    transform: translateX(0);
+  }
+
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+/* --- Creative Neo-Brutalist Animations --- */
+
+/* 1. Brutal Bounce: Hard, rigid drop and bounce */
+@keyframes brutalBounce {
+  0% {
+    transform: translateY(-40px);
+    opacity: 0;
+    box-shadow: 0px 0px 0px 0px var(--shadow-color);
+  }
+
+  40% {
+    transform: translateY(0);
+    opacity: 1;
+    box-shadow: 8px 8px 0px 0px var(--shadow-color);
+  }
+
+  60% {
+    transform: translateY(-10px);
+  }
+
+  80% {
+    transform: translateY(0);
+  }
+
+  90% {
+    transform: translateY(-4px);
+  }
+
+  100% {
+    transform: translateY(0);
+    opacity: 1;
+    box-shadow: 8px 8px 0px 0px var(--shadow-color);
+  }
+}
+
+.animate-brutal-bounce {
+  animation: brutalBounce 0.7s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+  opacity: 0;
+}
+
+/* 2. Glitch Effect for headers/buttons on hover */
+@keyframes glitch {
+  0% {
+    transform: translate(0);
+  }
+
+  20% {
+    transform: translate(-2px, 2px);
+  }
+
+  40% {
+    transform: translate(-2px, -2px);
+  }
+
+  60% {
+    transform: translate(2px, 2px);
+  }
+
+  80% {
+    transform: translate(2px, -2px);
+  }
+
+  100% {
+    transform: translate(0);
+  }
+}
+
+.hover-glitch:hover {
+  animation: glitch 0.3s steps(2, start) infinite;
+}
+
+/* 3. Brutal Slide Right */
+@keyframes slideInRightBrutal {
+  0% {
+    transform: translateX(40px) skewX(-5deg);
+    opacity: 0;
+  }
+
+  100% {
+    transform: translateX(0) skewX(0deg);
+    opacity: 1;
+  }
+}
+
+.animate-slide-right {
+  animation: slideInRightBrutal 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  opacity: 0;
+}
+
+/* 4. Pulse/Attention grabbing for CTA */
+@keyframes brutalPulse {
+  0% {
+    transform: scale(1);
+    box-shadow: 4px 4px 0px 0px var(--shadow-color);
+  }
+
+  50% {
+    transform: scale(1.05) rotate(-1deg);
+    box-shadow: 8px 8px 0px 0px var(--shadow-color);
+    background-color: var(--color-emerald);
+  }
+
+  100% {
+    transform: scale(1);
+    box-shadow: 4px 4px 0px 0px var(--shadow-color);
+  }
+}
+
+.animate-brutal-pulse {
+  animation: brutalPulse 2s infinite;
+}
+
+/* 5. Jitter Entrance: comes in with a sharp shake */
+@keyframes jitterEntrance {
+  0% {
+    transform: scale(0.9) rotate(-3deg);
+    opacity: 0;
+  }
+
+  50% {
+    transform: scale(1.05) rotate(3deg);
+    opacity: 1;
+  }
+
+  75% {
+    transform: scale(0.98) rotate(-1deg);
+  }
+
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+.animate-jitter-in {
+  animation: jitterEntrance 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  opacity: 0;
+}
+
+/* 6. Stagger Delay Utility */
+.delay-100 {
+  animation-delay: 0.1s;
+}
+
+.delay-200 {
+  animation-delay: 0.2s;
+}
+
+.delay-300 {
+  animation-delay: 0.3s;
+}
+
+.delay-400 {
+  animation-delay: 0.4s;
+}
+
+.delay-500 {
+  animation-delay: 0.5s;
+}
+
+.delay-600 {
+  animation-delay: 0.6s;
+}
+
+.delay-700 {
+  animation-delay: 0.7s;
+}
