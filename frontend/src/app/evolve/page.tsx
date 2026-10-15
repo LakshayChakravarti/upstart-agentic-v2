@@ -26,7 +26,7 @@ const LOADING_PHASES = [
 const PHASE = { ELABORATE: 1, VIABILITY: 1.5, EXPANSION: 2, DIRECTIONS: 3, ANALYZING: 4 } as const;
 
 export default function EvolvePage() {
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const router = useRouter();
 
     // Data from previous step
@@ -66,6 +66,7 @@ export default function EvolvePage() {
     const timeoutTimer = useRef<NodeJS.Timeout | null>(null);
 
     useEffect(() => {
+        if (authLoading) return;
         if (!user) { router.push('/login'); return; }
         const stored = sessionStorage.getItem('upstart_ideas');
         if (!stored) { router.push('/generate'); return; }
@@ -79,7 +80,7 @@ export default function EvolvePage() {
         } catch {
             router.push('/ideas');
         }
-    }, [user]);
+    }, [user, authLoading, router]);
 
     // Phase 1 → Phase 1.5: Check Viability first
     const handleCheckViability = async () => {
@@ -251,7 +252,7 @@ export default function EvolvePage() {
         }
     };
 
-    if (!ready) return (
+    if (authLoading || !ready) return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
             <div className="loading-spinner" />
         </div>

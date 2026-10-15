@@ -25,6 +25,10 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
         if (!res.ok) {
             const err = await res.json().catch(() => ({ error: 'Request failed' }));
+            if (res.status === 401 && typeof window !== 'undefined') {
+                localStorage.removeItem('upstart_token');
+                localStorage.removeItem('upstart_user');
+            }
             throw new Error(err.error || `HTTP ${res.status}`);
         }
         return res.json();
@@ -207,6 +211,19 @@ export interface AnalysisResult {
         edgeTool?: string;
         dataStrategy?: string;
         monetization: string[];
+        theReaper?: Array<{ point?: string; reason?: string } | string>;
+        thePainMiner?: Array<{ frustration?: string; pain?: string } | string>;
+        pricingArchitect?: {
+            starter?: { price: string; features: string[] };
+            pro?: { price: string; features: string[] };
+            enterprise?: { price: string; features: string[] };
+            [key: string]: any;
+        };
+        thePivotMaster?: {
+            winningEdge?: string;
+            [key: string]: any;
+        };
+        researchSources?: Array<{ title?: string; url: string }>;
         roadmap: Array<{
             week: string;
             goal: string;

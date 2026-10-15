@@ -14,7 +14,7 @@ const BUDGET_OPTIONS = [
 ];
 
 export default function GeneratePage() {
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const router = useRouter();
     const [loading, setLoading] = useState(false);
     const [stickLoading, setStickLoading] = useState(false);
@@ -32,12 +32,13 @@ export default function GeneratePage() {
 
 
     useEffect(() => {
-        if (!user) {
+        if (!authLoading && !user) {
             router.push('/login');
         }
-    }, [user, router]);
+    }, [user, authLoading, router]);
 
-    if (!user) {
+    // Show nothing while auth state is being hydrated from localStorage
+    if (authLoading || !user) {
         return null;
     }
 

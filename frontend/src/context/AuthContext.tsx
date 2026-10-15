@@ -33,8 +33,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const storedToken = localStorage.getItem('upstart_token');
         const storedUser = localStorage.getItem('upstart_user');
         if (storedToken && storedUser) {
-            setToken(storedToken);
-            setUser(JSON.parse(storedUser));
+            try {
+                const parsedUser = JSON.parse(storedUser);
+                setToken(storedToken);
+                setUser(parsedUser);
+                // Verify with backend that token is still valid
+                apiClient.me().catch(() => {
+                    localStorage.removeItem('upstart_token');
+                    localStorage.removeItem('upstart_user');
+                    setToken(null);
+                    setUser(null);
+                });
+            } catch {
+                localStorage.removeItem('upstart_token');
+                localStorage.removeItem('upstart_user');
+                setToken(null);
+                setUser(null);
+            }
         }
         setLoading(false);
     }, []);

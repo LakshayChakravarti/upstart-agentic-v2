@@ -6,7 +6,7 @@ import { useAuth } from '@/context/AuthContext';
 import { apiClient, type SavedIdea } from '@/lib/api';
 
 export default function SavedPage() {
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const router = useRouter();
     const [ideas, setIdeas] = useState<SavedIdea[]>([]);
     const [loading, setLoading] = useState(true);
@@ -14,12 +14,13 @@ export default function SavedPage() {
     const [deletingId, setDeletingId] = useState<number | null>(null);
 
     useEffect(() => {
+        if (authLoading) return;
         if (!user) { router.push('/login'); return; }
         apiClient.getSavedIdeas()
             .then(res => setIdeas(res.ideas))
             .catch(err => setError(err.message || 'Failed to load ideas'))
             .finally(() => setLoading(false));
-    }, [user]);
+    }, [user, authLoading, router]);
 
     const handleDelete = async (e: React.MouseEvent, ideaId: number) => {
         e.stopPropagation(); // prevent card click nav
@@ -35,7 +36,7 @@ export default function SavedPage() {
         }
     };
 
-    if (loading) return (
+    if (authLoading || loading) return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
             <div className="loading-spinner" />
         </div>

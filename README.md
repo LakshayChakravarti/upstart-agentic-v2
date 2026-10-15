@@ -1,4 +1,4 @@
-<div align="center">
+﻿<div align="center">
   <h1>🚀 Upstart Agentic V2 - AI Idea Evolution Engine</h1>
   <p>
     <strong>Turn vague interests into validated startup or project ideas with full execution roadmaps.</strong>
@@ -47,10 +47,10 @@ Upstart, your AI-powered digital incubator, solves this by providing a system th
 ## 📸 Screenshots
 
 ### Enhanced Landing Page
-![Landing Page](UpStart/images/landing-enhanced.png)
+![Landing Page](images/landing-enhanced.png)
 
 ### Venture Blueprint Dashboard
-![Idea Dashboard](UpStart/images/dashboard.png)
+![Idea Dashboard](images/dashboard.png)
 
 ---
 
@@ -91,7 +91,7 @@ To get a local copy up and running, follow these simple complete steps.
 
 ```bash
 git clone https://github.com/LakshayChakravarti/upstart-agentic-v2.git
-cd upstart-agentic-v2/UpStart
+cd upstart-agentic-v2
 ```
 
 ### 2. Setup the Backend
@@ -120,7 +120,7 @@ npm run dev
 
 Open a new terminal window/tab:
 ```bash
-cd ../frontend
+cd frontend
 npm install
 ```
 
