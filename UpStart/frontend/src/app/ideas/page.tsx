@@ -5,7 +5,7 @@ import { useAuth } from '@/context/AuthContext';
 import { apiClient, type Idea } from '@/lib/api';
 
 export default function IdeasPage() {
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const router = useRouter();
     const [ideas, setIdeas] = useState<Idea[]>([]);
     const [ideaSessionId, setIdeaSessionId] = useState<number | null>(null);
@@ -14,6 +14,7 @@ export default function IdeasPage() {
     const [ready, setReady] = useState(false);
 
     useEffect(() => {
+        if (authLoading) return;
         if (!user) { router.push('/login'); return; }
         const stored = sessionStorage.getItem('upstart_ideas');
         if (!stored) { router.push('/generate'); return; }
@@ -32,7 +33,7 @@ export default function IdeasPage() {
         } catch {
             router.push('/generate');
         }
-    }, [user]);
+    }, [user, authLoading, router]);
 
     const handleProceed = () => {
         if (selectedIndex === null || !ideaSessionId) return;
@@ -47,7 +48,7 @@ export default function IdeasPage() {
     };
 
 
-    if (!ready) return (
+    if (authLoading || !ready) return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
             <div className="loading-spinner" />
         </div>

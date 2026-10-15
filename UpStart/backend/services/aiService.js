@@ -3,67 +3,98 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const SYSTEM_INSTRUCTION = `You are a Master Venture Architect and OSINT Analyst with 20 years of experience. You always output valid minified JSON with zero markdown.`;
 
+const GROQ_MODELS = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
+
 async function callGroq(prompt) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 75000); // 75s timeout
+  let lastError = null;
+
+  for (const model of GROQ_MODELS) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s per attempt
+    try {
+      const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'system', content: SYSTEM_INSTRUCTION }, { role: 'user', content: prompt }],
+          temperature: 0.7,
+          response_format: { type: 'json_object' },
+        }),
+        signal: controller.signal,
+      });
+      const data = await response.json();
+      if (!response.ok || data.error) {
+        throw new Error(`Groq (${model}) error: ${data.error?.message || response.statusText}`);
+      }
+      return data.choices[0].message.content;
+    } catch (err) {
+      lastError = err;
+      console.warn(`Groq model ${model} failed, trying next fallback:`, err.message);
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  }
+
+  // If all Groq models fail, gracefully fallback to Gemini
+  console.warn('All Groq models failed. Falling back to Gemini...');
   try {
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${process.env.GROQ_API_KEY}` },
-      body: JSON.stringify({
-        model: 'llama-3.3-70b-versatile',
-        messages: [{ role: 'system', content: SYSTEM_INSTRUCTION }, { role: 'user', content: prompt }],
-        temperature: 0.7, max_tokens: 8000, response_format: { type: 'json_object' },
-      }),
-      signal: controller.signal,
-    });
-    const data = await response.json();
-    if (!response.ok || data.error) throw new Error(`Groq API error: ${data.error?.message || response.statusText}`);
-    return data.choices[0].message.content;
-  } catch (err) {
-    if (err.name === 'AbortError') throw new Error('Groq API timed out.');
-    throw err;
-  } finally { clearTimeout(timeoutId); }
+    return await callGemini(prompt);
+  } catch (geminiErr) {
+    console.error('Both Groq and Gemini failed:', geminiErr);
+    throw lastError || geminiErr;
+  }
 }
 
 async function callGemini(prompt) {
   if (!process.env.GEMINI_API_KEY) {
-      console.warn("No GEMINI_API_KEY found. Falling back to Groq.");
-      return callGroq(prompt);
+    throw new Error('No GEMINI_API_KEY found in environment.');
   }
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({
-      model: "gemini-1.5-flash",
-      generationConfig: { responseMimeType: "application/json" }
-  });
-  const result = await model.generateContent(prompt);
-  return result.response.text();
+
+  const models = ['gemini-3.5-flash-lite', 'gemini-3.5-flash'];
+  let lastErr = null;
+
+  for (const modelName of models) {
+    try {
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+      const model = genAI.getGenerativeModel({
+        model: modelName,
+        generationConfig: { responseMimeType: 'application/json' }
+      });
+      const result = await model.generateContent(prompt);
+      return result.response.text();
+    } catch (err) {
+      lastErr = err;
+      console.warn(`Gemini model ${modelName} failed, trying next:`, err.message);
+    }
+  }
+  throw lastErr;
 }
 
 async function callTavily(query) {
-    if (!process.env.TAVILY_API_KEY) {
-        console.warn("No TAVILY_API_KEY, returning empty context.");
-        return { context: "No external context available.", urls: [] };
-    }
-    try {
-        const response = await fetch('https://api.tavily.com/search', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                api_key: process.env.TAVILY_API_KEY,
-                query: query,
-                search_depth: 'advanced',
-                max_results: 5
-            })
-        });
-        const data = await response.json();
-        const urls = data.results?.map(r => ({ title: r.title, url: r.url })) || [];
-        const context = data.results?.map(r => `Source: ${r.url}\nContent: ${r.content}`).join('\n\n') || "No results found.";
-        return { urls, context };
-    } catch (e) {
-        console.error("Tavily error:", e);
-        return { context: "Error fetching data.", urls: [] };
-    }
+  if (!process.env.TAVILY_API_KEY) {
+    console.warn("No TAVILY_API_KEY, returning empty context.");
+    return { context: "No external context available.", urls: [] };
+  }
+  try {
+    const response = await fetch('https://api.tavily.com/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        api_key: process.env.TAVILY_API_KEY,
+        query: query,
+        search_depth: 'advanced',
+        max_results: 5
+      })
+    });
+    const data = await response.json();
+    const urls = data.results?.map(r => ({ title: r.title, url: r.url })) || [];
+    const context = data.results?.map(r => `Source: ${r.url}\nContent: ${r.content}`).join('\n\n') || "No results found.";
+    return { urls, context };
+  } catch (e) {
+    console.error("Tavily error:", e);
+    return { context: "Error fetching data.", urls: [] };
+  }
 }
 
 function extractJSON(text) {
@@ -79,15 +110,19 @@ FOUNDER PROFILE:
 - Domain: ${domain}
 - Target Audience: ${targetUsers || 'Not specified'}
 - Skills: ${skills || 'Not specified'}
-Return ONLY a valid JSON array of exactly 3 objects with exact keys: title, problem, targetUsers, solution, tagline`;
+Return ONLY a valid JSON object with an "ideas" array containing exactly 3 objects with exact keys: title, problem, targetUsers, solution, tagline`;
   try {
     const text = await callGroq(prompt);
     const parsed = extractJSON(text);
     if (Array.isArray(parsed)) return parsed;
+    if (parsed.ideas && Array.isArray(parsed.ideas)) return parsed.ideas;
     const arrayValue = Object.values(parsed).find(v => Array.isArray(v));
     if (arrayValue) return arrayValue;
-    throw new Error('Unexpected shape');
-  } catch (e) { throw new Error("Failed to generate ideas."); }
+    throw new Error('Unexpected response shape from AI model');
+  } catch (e) {
+    console.error('generateIdeas error:', e);
+    throw new Error('Failed to generate ideas: ' + (e.message || 'AI service error'));
+  }
 }
 
 async function generateStrategicDirections(idea, userElaboration, founderComments) {
@@ -102,7 +137,10 @@ Return ONLY JSON: {"directions": [{"directionName": "string", "corePivot": "stri
     const arrayValue = Object.values(parsed).find(v => Array.isArray(v));
     if (arrayValue) return arrayValue;
     throw new Error('Unexpected response shape');
-  } catch (e) { throw new Error("Failed to generate strategic directions."); }
+  } catch (e) {
+    console.error('generateStrategicDirections error:', e);
+    throw new Error("Failed to generate strategic directions: " + e.message);
+  }
 }
 
 async function expandIdea(idea, userElaboration, budget, previousComments) {
@@ -114,7 +152,10 @@ Return ONLY JSON with exactly: {
 }`;
   try {
     return extractJSON(await callGroq(prompt));
-  } catch (e) { throw new Error("Failed to expand idea."); }
+  } catch (e) {
+    console.error('expandIdea error:', e);
+    throw new Error("Failed to expand idea: " + e.message);
+  }
 }
 
 async function analyzeIdeaBusinessBlueprint(idea, skills, timeAvailable, budgetLevel, experienceLevel, strategicDirection, userElaboration) {
@@ -155,7 +196,7 @@ Return ONLY valid minified JSON with exactly these keys:
      return parsed;
   } catch (e) {
     console.error("Error in analyzeIdea:", e);
-    throw new Error("Failed to perform deep analysis.");
+    throw new Error("Failed to perform deep analysis: " + e.message);
   }
 }
 

@@ -6,18 +6,19 @@ import { apiClient, type AnalysisResult } from '@/lib/api';
 import { Printer, ExternalLink } from 'lucide-react';
 
 export default function DashboardPage() {
-    const { user } = useAuth();
+    const { user, loading: authLoading } = useAuth();
     const router = useRouter();
     const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
     const [saved, setSaved] = useState(false);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
+        if (authLoading) return;
         if (!user) { router.push('/login'); return; }
         const stored = sessionStorage.getItem('upstart_analysis');
         if (!stored) { router.push('/ideas'); return; }
         setAnalysis(JSON.parse(stored));
-    }, [user]);
+    }, [user, authLoading, router]);
 
     const handleSave = async () => {
         if (!analysis || saving || saved) return;
@@ -26,14 +27,14 @@ export default function DashboardPage() {
         setSaving(false);
     };
 
-    if (!analysis) return (
+    if (authLoading || !analysis) return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
             <div className="loading-spinner" />
         </div>
     );
 
     const { selectedIdea: idea, blueprint: bp } = analysis;
-    const adv = bp || {}; // Top-level properties in dashboard memory
+    const adv: any = bp || {}; // Top-level properties in dashboard memory
 
     const feasScore = bp?.scores?.compositeScore ?? bp?.feasibilityScore ?? (bp?.scores?.technicalFeasibility ? Math.round((bp.scores.technicalFeasibility + bp.scores.marketReadiness + bp.scores.regulatoryRisk + bp.scores.competitiveAdvantage + bp.scores.executionComplexity) / 5) : 0);
     const feasColor = feasScore >= 70 ? 'var(--color-emerald)' : feasScore >= 50 ? 'var(--color-primary)' : 'var(--color-rose)';
