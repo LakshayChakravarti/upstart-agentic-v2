@@ -124,7 +124,8 @@ router.post('/analyze-idea', authMiddleware, async (req, res) => {
             budget_level,
             experience_level,
             strategicDirection || null,
-            userElaboration || session.user_elaboration || null
+            userElaboration || session.user_elaboration || null,
+            ideaSessionId
         );
 
         // Compute composite feasibility score from AI sub-scores using scoringEngine

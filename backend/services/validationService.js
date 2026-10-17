@@ -1,18 +1,27 @@
-require('dotenv').config();
+﻿require('dotenv').config();
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const SYSTEM_INSTRUCTION = `You are a Principal Venture Validator and Market Analyst with access to a massive database of millions of extant and failed startups. 
 Your sole purpose is to ruthlessly prevent founders from 'reinventing the wheel' by retrieving the closest existing matches to their idea and flagging hidden operational, legal, and technical risks.
 You output ONLY valid minified JSON with absolutely zero markdown or conversational text.`;
 
-const GROQ_MODELS = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
+// qwen/qwen3.8-27b is the only Groq model on this account confirmed to support
+// response_format: json_object. Placed first. gpt-oss fallbacks fast-fail (HTTP 400).
+const GROQ_MODELS = [
+  'qwen/qwen3.8-27b',    // Primary: json_object confirmed, ~150-350ms
+  'openai/gpt-oss-120b', // Fallback: no json_object support, fast-fails (400)
+  'openai/gpt-oss-20b',  // Last-resort Groq fallback
+];
+
+// Non-retryable HTTP status codes — fail over immediately without burning the timeout.
+const NON_RETRYABLE_STATUS = new Set([400, 401, 403, 404, 422]);
 
 async function callGroqValidation(prompt) {
   let lastError = null;
 
   for (const model of GROQ_MODELS) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s per attempt
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
 
     try {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -27,11 +36,16 @@ async function callGroqValidation(prompt) {
             { role: 'system', content: SYSTEM_INSTRUCTION },
             { role: 'user', content: prompt },
           ],
-          temperature: 0.3, // Lower temp for more factual retrieval 
+          temperature: 0.3,
           response_format: { type: 'json_object' },
         }),
         signal: controller.signal,
       });
+
+      // Fast-fail on non-retryable errors
+      if (NON_RETRYABLE_STATUS.has(response.status)) {
+        throw new Error(`Groq (${model}) non-retryable HTTP ${response.status}`);
+      }
 
       const data = await response.json();
       if (!response.ok || data.error) {
@@ -53,7 +67,10 @@ async function callGroqValidation(prompt) {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
       const model = genAI.getGenerativeModel({
         model: 'gemini-3.5-flash-lite',
-        generationConfig: { responseMimeType: 'application/json' },
+        generationConfig: {
+          responseMimeType: 'application/json',
+          maxOutputTokens: 8192,
+        },
       });
       const result = await model.generateContent(prompt);
       return result.response.text();

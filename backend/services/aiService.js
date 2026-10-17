@@ -3,14 +3,27 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const SYSTEM_INSTRUCTION = `You are a Master Venture Architect and OSINT Analyst with 20 years of experience. You always output valid minified JSON with zero markdown.`;
 
-const GROQ_MODELS = ['openai/gpt-oss-120b', 'qwen/qwen3.8-27b', 'openai/gpt-oss-20b'];
+// Model priority order — qwen/qwen3.8-27b is listed first because it is the only
+// Groq model on this account that supports response_format: json_object.
+// The gpt-oss models are kept as fallbacks; they do not support json_object and
+// will fast-fail (HTTP 400) before qwen is attempted if qwen is unavailable.
+const GROQ_MODELS = [
+  'qwen/qwen3.8-27b',    // Primary: confirmed json_object support, ~150-350ms
+  'openai/gpt-oss-120b', // Fallback: no json_object support — fast-fails (400)
+  'openai/gpt-oss-20b',  // Last-resort Groq fallback
+];
+
+// HTTP status codes that indicate a non-retryable provider error.
+// These cause immediate failover to the next model without waiting for the full timeout.
+const NON_RETRYABLE_STATUS = new Set([400, 401, 403, 404, 422]);
 
 async function callGroq(prompt) {
   let lastError = null;
 
   for (const model of GROQ_MODELS) {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45s per attempt
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
+
     try {
       const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
@@ -23,6 +36,13 @@ async function callGroq(prompt) {
         }),
         signal: controller.signal,
       });
+
+      // Fast-fail on non-retryable errors — no point waiting 30s for a 400/404
+      if (NON_RETRYABLE_STATUS.has(response.status)) {
+        const errText = await response.text().catch(() => response.statusText);
+        throw new Error(`Groq (${model}) non-retryable HTTP ${response.status}`);
+      }
+
       const data = await response.json();
       if (!response.ok || data.error) {
         throw new Error(`Groq (${model}) error: ${data.error?.message || response.statusText}`);
@@ -36,7 +56,6 @@ async function callGroq(prompt) {
     }
   }
 
-  // If all Groq models fail, gracefully fallback to Gemini
   console.warn('All Groq models failed. Falling back to Gemini...');
   try {
     return await callGemini(prompt);
@@ -51,15 +70,24 @@ async function callGemini(prompt) {
     throw new Error('No GEMINI_API_KEY found in environment.');
   }
 
-  const models = ['gemini-3.5-flash-lite', 'gemini-3.5-flash'];
+  // gemini-3.5-flash-lite is the confirmed primary (working, ~1.6s, STOP finish).
+  // gemini-3.5-flash is a thinking model — needs higher maxOutputTokens to avoid
+  // MAX_TOKENS truncation on the council prompt (~800 tokens in).
+  const geminiModels = [
+    { name: 'gemini-3.5-flash-lite', maxOutputTokens: 8192 },
+    { name: 'gemini-3.5-flash',      maxOutputTokens: 16384 },
+  ];
   let lastErr = null;
 
-  for (const modelName of models) {
+  for (const { name: modelName, maxOutputTokens } of geminiModels) {
     try {
       const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
       const model = genAI.getGenerativeModel({
         model: modelName,
-        generationConfig: { responseMimeType: 'application/json' }
+        generationConfig: {
+          responseMimeType: 'application/json',
+          maxOutputTokens,
+        },
       });
       const result = await model.generateContent(prompt);
       return result.response.text();
@@ -71,10 +99,13 @@ async function callGemini(prompt) {
   throw lastErr;
 }
 
+const { RetrievalService } = require('./rag/retrievalService');
+const { runCouncil } = require('./councilOrchestrator');
+
 async function callTavily(query) {
   if (!process.env.TAVILY_API_KEY) {
     console.warn("No TAVILY_API_KEY, returning empty context.");
-    return { context: "No external context available.", urls: [] };
+    return { context: "No external context available.", urls: [], results: [] };
   }
   try {
     const response = await fetch('https://api.tavily.com/search', {
@@ -90,10 +121,10 @@ async function callTavily(query) {
     const data = await response.json();
     const urls = data.results?.map(r => ({ title: r.title, url: r.url })) || [];
     const context = data.results?.map(r => `Source: ${r.url}\nContent: ${r.content}`).join('\n\n') || "No results found.";
-    return { urls, context };
+    return { urls, context, results: data.results || [] };
   } catch (e) {
     console.error("Tavily error:", e);
-    return { context: "Error fetching data.", urls: [] };
+    return { context: "Error fetching data.", urls: [], results: [] };
   }
 }
 
@@ -158,16 +189,105 @@ Return ONLY JSON with exactly: {
   }
 }
 
-async function analyzeIdeaBusinessBlueprint(idea, skills, timeAvailable, budgetLevel, experienceLevel, strategicDirection, userElaboration) {
-  // 1. Tavily Research
+async function analyzeIdeaBusinessBlueprint(
+  idea,
+  skills,
+  timeAvailable,
+  budgetLevel,
+  experienceLevel,
+  strategicDirection,
+  userElaboration,
+  ideaId = null,
+  options = {}
+) {
+  const searchFn = options.tavilySearchFn || callTavily;
   const tavilyQuery = `troubleshooting or complaints or competitors for: ${idea.title} ${idea.problem} site:reddit.com OR alternatives`;
-  const tavilyData = await callTavily(tavilyQuery);
-  const researchContext = `\n\n=== TAVILY RESEARCH CONTEXT ===\n${tavilyData.context}\n`;
+  const tavilyData = await searchFn(tavilyQuery);
 
-  // 2. Gemini Council of Experts Prompt
-  const prompt = `You are a "Council of Experts" — an elite group of 4 adversarial personas analyzing a startup idea.
-You have access to live Tavily market research context.${researchContext}
-USER IDEA: "${idea.title} — ${idea.problem} — ${idea.solution}"
+  let researchContext = '';
+  let researchSources = [];
+  let isRagGrounded = false;
+  let ragDiagnostics = null;
+
+  // Execute Vector RAG if ideaId is present and search produced results
+  if (ideaId && Array.isArray(tavilyData.results) && tavilyData.results.length > 0) {
+    try {
+      const retrievalSvc = options.retrievalService || new RetrievalService();
+      const ragResult = await retrievalSvc.run(ideaId, idea, tavilyData.results, options);
+
+      if (ragResult.success && ragResult.retrievedChunks.length > 0) {
+        researchContext = ragResult.promptContext;
+        researchSources = ragResult.sources;
+        isRagGrounded = true;
+        ragDiagnostics = ragResult.diagnostics || { status: 'grounded', reason: 'OK' };
+      } else {
+        // Fallback to raw Tavily context when no chunks meet similarity threshold
+        console.warn(`[RAG Pipeline] Vector retrieval returned no chunks above threshold (${ragResult.reason}). Falling back to raw research context.`);
+        researchContext = tavilyData.context ? `\n\n=== TAVILY RESEARCH CONTEXT (FALLBACK: UNFILTERED) ===\n${tavilyData.context}\n` : '';
+        researchSources = tavilyData.urls || [];
+        ragDiagnostics = ragResult.diagnostics || { status: 'fallback', reason: ragResult.reason || 'NO_RELEVANT_CHUNKS' };
+      }
+    } catch (ragErr) {
+      // Graceful fallback to raw Tavily on any retrieval error
+      const safeErrMsg = (ragErr && ragErr.message ? String(ragErr.message) : 'Unknown error')
+        .replace(/key=[a-zA-Z0-9_\-]+/gi, 'key=[REDACTED]');
+      console.warn(`[RAG Pipeline] Retrieval error (${safeErrMsg}). Falling back to raw research context.`);
+      researchContext = tavilyData.context ? `\n\n=== TAVILY RESEARCH CONTEXT (FALLBACK) ===\n${tavilyData.context}\n` : '';
+      researchSources = tavilyData.urls || [];
+      ragDiagnostics = { status: 'fallback', reason: 'ERROR' };
+    }
+  } else if (tavilyData.context) {
+    // Legacy / fallback when no ideaId or no structured results
+    researchContext = `\n\n=== TAVILY RESEARCH CONTEXT ===\n${tavilyData.context}\n`;
+    researchSources = tavilyData.urls || [];
+    ragDiagnostics = { status: 'fallback', reason: ideaId ? 'NO_STRUCTURED_RESULTS' : 'MISSING_IDEA_ID' };
+  } else {
+    ragDiagnostics = { status: 'empty', reason: 'NO_RESEARCH_AVAILABLE' };
+  }
+
+  const callGeminiFn = options.geminiFn || callGemini;
+  let councilDiagnostics = null;
+
+  if (options.useCouncil) {
+    try {
+      const councilBlueprint = await runCouncil(
+        idea,
+        researchContext,
+        isRagGrounded,
+        callGeminiFn,
+        { clock: options.clock }
+      );
+      councilBlueprint.researchSources = researchSources;
+      if (isRagGrounded) {
+        councilBlueprint.ragGrounded = true;
+      }
+      if (ragDiagnostics) {
+        councilBlueprint.ragDiagnostics = ragDiagnostics;
+      }
+      return councilBlueprint;
+    } catch (councilErr) {
+      councilDiagnostics = councilErr.diagnostics || {
+        totalDurationMs: 0,
+        personaDurationsMs: {},
+        synthesisDurationMs: null,
+        successfulPersonaCount: 0,
+        failedPersonaCount: 1,
+        synthesisSuccess: false,
+        completed: false,
+        fallbackUsed: true,
+        fallbackReason: councilErr.code || 'COUNCIL_ERROR',
+      };
+      const safeErrMsg = (councilErr && councilErr.message ? String(councilErr.message) : 'Unknown error')
+        .replace(/key=[a-zA-Z0-9_\-]+/gi, 'key=[REDACTED]')
+        .replace(/bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]');
+      console.warn(`[Council Orchestrator] Council execution failed (${safeErrMsg}). Falling back to single-call blueprint.`);
+    }
+  }
+
+  const prompt = `You are a "Council of Experts" -- an elite group of 4 adversarial personas analyzing a startup idea.
+${researchContext ? `You have access to market research context:${researchContext}
+Distinguish sourced evidence from inference. Ground your findings in the provided evidence wherever relevant, and do not invent citations.` : 'No external market research context is available. Rely on foundational first-principles reasoning.'}
+USER IDEA: "${idea.title} -- ${idea.problem} -- ${idea.solution || ''}"
 Provide the base fields AND the 4 new specific persona outputs:
 PERSONA 1 - THE REAPER: Find 3 brutal reasons why this will fail.
 PERSONA 2 - THE PAIN MINER: Extract 3 specific real customer frustrations from research.
@@ -189,15 +309,36 @@ Return ONLY valid minified JSON with exactly these keys:
   },
   "thePivotMaster": { "winningEdge": "string" }
 }`;
+
   try {
-     const text = await callGemini(prompt);
-     let parsed = extractJSON(text);
-     parsed.researchSources = tavilyData.urls;
-     return parsed;
+    const text = await callGeminiFn(prompt);
+    let parsed = extractJSON(text);
+    parsed.researchSources = researchSources;
+    if (isRagGrounded) {
+      parsed.ragGrounded = true;
+    }
+    if (ragDiagnostics) {
+      parsed.ragDiagnostics = ragDiagnostics;
+    }
+    if (councilDiagnostics) {
+      parsed.councilDiagnostics = councilDiagnostics;
+    }
+    return parsed;
   } catch (e) {
-    console.error("Error in analyzeIdea:", e);
-    throw new Error("Failed to perform deep analysis: " + e.message);
+    const safeErrMsg = (e && e.message ? String(e.message) : 'Unknown error')
+      .replace(/key=[a-zA-Z0-9_\-]+/gi, 'key=[REDACTED]')
+      .replace(/bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]');
+    console.error("Error in analyzeIdea:", safeErrMsg);
+    throw new Error("Failed to perform deep analysis: " + safeErrMsg);
   }
 }
 
-module.exports = { generateIdeas, generateStrategicDirections, expandIdea, analyzeIdeaBusinessBlueprint };
+module.exports = {
+  generateIdeas,
+  generateStrategicDirections,
+  expandIdea,
+  analyzeIdeaBusinessBlueprint,
+  callTavily,
+  callGemini,
+  runCouncil,
+};
