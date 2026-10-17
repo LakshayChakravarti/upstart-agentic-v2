@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const SYSTEM_INSTRUCTION = `You are a Master Venture Architect and OSINT Analyst with 20 years of experience. You always output valid minified JSON with zero markdown.`;
@@ -99,10 +99,13 @@ async function callGemini(prompt) {
   throw lastErr;
 }
 
+const { RetrievalService } = require('./rag/retrievalService');
+const { runCouncil } = require('./councilOrchestrator');
+
 async function callTavily(query) {
   if (!process.env.TAVILY_API_KEY) {
     console.warn("No TAVILY_API_KEY, returning empty context.");
-    return { context: "No external context available.", urls: [] };
+    return { context: "No external context available.", urls: [], results: [] };
   }
   try {
     const response = await fetch('https://api.tavily.com/search', {
@@ -118,10 +121,10 @@ async function callTavily(query) {
     const data = await response.json();
     const urls = data.results?.map(r => ({ title: r.title, url: r.url })) || [];
     const context = data.results?.map(r => `Source: ${r.url}\nContent: ${r.content}`).join('\n\n') || "No results found.";
-    return { urls, context };
+    return { urls, context, results: data.results || [] };
   } catch (e) {
     console.error("Tavily error:", e);
-    return { context: "Error fetching data.", urls: [] };
+    return { context: "Error fetching data.", urls: [], results: [] };
   }
 }
 
@@ -186,14 +189,105 @@ Return ONLY JSON with exactly: {
   }
 }
 
-async function analyzeIdeaBusinessBlueprint(idea, skills, timeAvailable, budgetLevel, experienceLevel, strategicDirection, userElaboration) {
+async function analyzeIdeaBusinessBlueprint(
+  idea,
+  skills,
+  timeAvailable,
+  budgetLevel,
+  experienceLevel,
+  strategicDirection,
+  userElaboration,
+  ideaId = null,
+  options = {}
+) {
+  const searchFn = options.tavilySearchFn || callTavily;
   const tavilyQuery = `troubleshooting or complaints or competitors for: ${idea.title} ${idea.problem} site:reddit.com OR alternatives`;
-  const tavilyData = await callTavily(tavilyQuery);
-  const researchContext = `\n\n=== TAVILY RESEARCH CONTEXT ===\n${tavilyData.context}\n`;
+  const tavilyData = await searchFn(tavilyQuery);
+
+  let researchContext = '';
+  let researchSources = [];
+  let isRagGrounded = false;
+  let ragDiagnostics = null;
+
+  // Execute Vector RAG if ideaId is present and search produced results
+  if (ideaId && Array.isArray(tavilyData.results) && tavilyData.results.length > 0) {
+    try {
+      const retrievalSvc = options.retrievalService || new RetrievalService();
+      const ragResult = await retrievalSvc.run(ideaId, idea, tavilyData.results, options);
+
+      if (ragResult.success && ragResult.retrievedChunks.length > 0) {
+        researchContext = ragResult.promptContext;
+        researchSources = ragResult.sources;
+        isRagGrounded = true;
+        ragDiagnostics = ragResult.diagnostics || { status: 'grounded', reason: 'OK' };
+      } else {
+        // Fallback to raw Tavily context when no chunks meet similarity threshold
+        console.warn(`[RAG Pipeline] Vector retrieval returned no chunks above threshold (${ragResult.reason}). Falling back to raw research context.`);
+        researchContext = tavilyData.context ? `\n\n=== TAVILY RESEARCH CONTEXT (FALLBACK: UNFILTERED) ===\n${tavilyData.context}\n` : '';
+        researchSources = tavilyData.urls || [];
+        ragDiagnostics = ragResult.diagnostics || { status: 'fallback', reason: ragResult.reason || 'NO_RELEVANT_CHUNKS' };
+      }
+    } catch (ragErr) {
+      // Graceful fallback to raw Tavily on any retrieval error
+      const safeErrMsg = (ragErr && ragErr.message ? String(ragErr.message) : 'Unknown error')
+        .replace(/key=[a-zA-Z0-9_\-]+/gi, 'key=[REDACTED]');
+      console.warn(`[RAG Pipeline] Retrieval error (${safeErrMsg}). Falling back to raw research context.`);
+      researchContext = tavilyData.context ? `\n\n=== TAVILY RESEARCH CONTEXT (FALLBACK) ===\n${tavilyData.context}\n` : '';
+      researchSources = tavilyData.urls || [];
+      ragDiagnostics = { status: 'fallback', reason: 'ERROR' };
+    }
+  } else if (tavilyData.context) {
+    // Legacy / fallback when no ideaId or no structured results
+    researchContext = `\n\n=== TAVILY RESEARCH CONTEXT ===\n${tavilyData.context}\n`;
+    researchSources = tavilyData.urls || [];
+    ragDiagnostics = { status: 'fallback', reason: ideaId ? 'NO_STRUCTURED_RESULTS' : 'MISSING_IDEA_ID' };
+  } else {
+    ragDiagnostics = { status: 'empty', reason: 'NO_RESEARCH_AVAILABLE' };
+  }
+
+  const callGeminiFn = options.geminiFn || callGemini;
+  let councilDiagnostics = null;
+
+  if (options.useCouncil) {
+    try {
+      const councilBlueprint = await runCouncil(
+        idea,
+        researchContext,
+        isRagGrounded,
+        callGeminiFn,
+        { clock: options.clock }
+      );
+      councilBlueprint.researchSources = researchSources;
+      if (isRagGrounded) {
+        councilBlueprint.ragGrounded = true;
+      }
+      if (ragDiagnostics) {
+        councilBlueprint.ragDiagnostics = ragDiagnostics;
+      }
+      return councilBlueprint;
+    } catch (councilErr) {
+      councilDiagnostics = councilErr.diagnostics || {
+        totalDurationMs: 0,
+        personaDurationsMs: {},
+        synthesisDurationMs: null,
+        successfulPersonaCount: 0,
+        failedPersonaCount: 1,
+        synthesisSuccess: false,
+        completed: false,
+        fallbackUsed: true,
+        fallbackReason: councilErr.code || 'COUNCIL_ERROR',
+      };
+      const safeErrMsg = (councilErr && councilErr.message ? String(councilErr.message) : 'Unknown error')
+        .replace(/key=[a-zA-Z0-9_\-]+/gi, 'key=[REDACTED]')
+        .replace(/bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]');
+      console.warn(`[Council Orchestrator] Council execution failed (${safeErrMsg}). Falling back to single-call blueprint.`);
+    }
+  }
 
   const prompt = `You are a "Council of Experts" -- an elite group of 4 adversarial personas analyzing a startup idea.
-You have access to live Tavily market research context.${researchContext}
-USER IDEA: "${idea.title} -- ${idea.problem} -- ${idea.solution}"
+${researchContext ? `You have access to market research context:${researchContext}
+Distinguish sourced evidence from inference. Ground your findings in the provided evidence wherever relevant, and do not invent citations.` : 'No external market research context is available. Rely on foundational first-principles reasoning.'}
+USER IDEA: "${idea.title} -- ${idea.problem} -- ${idea.solution || ''}"
 Provide the base fields AND the 4 new specific persona outputs:
 PERSONA 1 - THE REAPER: Find 3 brutal reasons why this will fail.
 PERSONA 2 - THE PAIN MINER: Extract 3 specific real customer frustrations from research.
@@ -215,15 +309,36 @@ Return ONLY valid minified JSON with exactly these keys:
   },
   "thePivotMaster": { "winningEdge": "string" }
 }`;
+
   try {
-    const text = await callGemini(prompt);
+    const text = await callGeminiFn(prompt);
     let parsed = extractJSON(text);
-    parsed.researchSources = tavilyData.urls;
+    parsed.researchSources = researchSources;
+    if (isRagGrounded) {
+      parsed.ragGrounded = true;
+    }
+    if (ragDiagnostics) {
+      parsed.ragDiagnostics = ragDiagnostics;
+    }
+    if (councilDiagnostics) {
+      parsed.councilDiagnostics = councilDiagnostics;
+    }
     return parsed;
   } catch (e) {
-    console.error("Error in analyzeIdea:", e);
-    throw new Error("Failed to perform deep analysis: " + e.message);
+    const safeErrMsg = (e && e.message ? String(e.message) : 'Unknown error')
+      .replace(/key=[a-zA-Z0-9_\-]+/gi, 'key=[REDACTED]')
+      .replace(/bearer\s+[a-zA-Z0-9_\-\.]+/gi, 'Bearer [REDACTED]');
+    console.error("Error in analyzeIdea:", safeErrMsg);
+    throw new Error("Failed to perform deep analysis: " + safeErrMsg);
   }
 }
 
-module.exports = { generateIdeas, generateStrategicDirections, expandIdea, analyzeIdeaBusinessBlueprint };
+module.exports = {
+  generateIdeas,
+  generateStrategicDirections,
+  expandIdea,
+  analyzeIdeaBusinessBlueprint,
+  callTavily,
+  callGemini,
+  runCouncil,
+};
