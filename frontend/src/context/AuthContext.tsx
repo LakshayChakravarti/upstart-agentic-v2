@@ -30,28 +30,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        const storedToken = localStorage.getItem('upstart_token');
-        const storedUser = localStorage.getItem('upstart_user');
-        if (storedToken && storedUser) {
-            try {
-                const parsedUser = JSON.parse(storedUser);
-                setToken(storedToken);
-                setUser(parsedUser);
-                // Verify with backend that token is still valid
-                apiClient.me().catch(() => {
+        const timer = setTimeout(() => {
+            const storedToken = localStorage.getItem('upstart_token');
+            const storedUser = localStorage.getItem('upstart_user');
+            if (storedToken && storedUser) {
+                try {
+                    const parsedUser = JSON.parse(storedUser);
+                    setToken(storedToken);
+                    setUser(parsedUser);
+                    // Verify with backend that token is still valid
+                    apiClient.me().catch(() => {
+                        localStorage.removeItem('upstart_token');
+                        localStorage.removeItem('upstart_user');
+                        setToken(null);
+                        setUser(null);
+                    });
+                } catch {
                     localStorage.removeItem('upstart_token');
                     localStorage.removeItem('upstart_user');
                     setToken(null);
                     setUser(null);
-                });
-            } catch {
-                localStorage.removeItem('upstart_token');
-                localStorage.removeItem('upstart_user');
-                setToken(null);
-                setUser(null);
+                }
             }
-        }
-        setLoading(false);
+            setLoading(false);
+        }, 0);
+
+        return () => clearTimeout(timer);
     }, []);
 
     const login = (newToken: string, newUser: User) => {

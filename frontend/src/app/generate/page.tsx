@@ -78,8 +78,8 @@ export default function GeneratePage() {
             // Store in sessionStorage for the ideas page (include budget for /evolve)
             sessionStorage.setItem('upstart_ideas', JSON.stringify({ ...result, budget: budgetValue }));
             router.push('/ideas');
-        } catch (err: any) {
-            setError(err.message || 'Failed to generate ideas. Please try again.');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to generate ideas. Please try again.');
         } finally {
             setLoading(false);
         }
@@ -118,8 +118,8 @@ export default function GeneratePage() {
                 selectedIdea: userIdea,
             }));
             router.push('/evolve');
-        } catch (err: any) {
-            setError(err.message || 'Something went wrong. Please try again.');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
         } finally {
             setStickLoading(false);
         }
@@ -166,7 +166,7 @@ export default function GeneratePage() {
                             required
                         />
                         <p style={{ fontSize: '0.8rem', color: 'var(--color-text-3)', marginTop: '6px' }}>
-                            Be specific: "AI tools for teachers" works better than just "Education"
+                            Be specific: &quot;AI tools for teachers&quot; works better than just &quot;Education&quot;
                         </p>
                     </div>
 

@@ -32,8 +32,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
             throw new Error(err.error || `HTTP ${res.status}`);
         }
         return res.json();
-    } catch (err: any) {
-        if (err.name === 'AbortError') {
+    } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError') {
             throw new Error('Request timed out. The AI is taking too long — please try again.');
         }
         throw err;
@@ -72,7 +72,7 @@ export const apiClient = {
             body: JSON.stringify(data),
         }),
 
-    analyzeIdea: (data: { ideaSessionId: number; selectedIdea: Idea; strategicDirection?: StrategicDirection; userElaboration?: string }) =>
+    analyzeIdea: (data: { ideaSessionId: number; selectedIdea: Idea; strategicDirection?: StrategicDirection; userElaboration?: string; useCouncil?: boolean }) =>
         request<AnalysisResult>('/api/analyze-idea', {
             method: 'POST',
             body: JSON.stringify(data),
@@ -101,7 +101,7 @@ export const apiClient = {
 
     getSavedIdeas: () => request<{ ideas: SavedIdea[] }>('/api/ideas'),
 
-    getIdea: (id: number) => request<{ idea: any; analysis: any }>(`/api/ideas/${id}`),
+    getIdea: (id: number) => request<{ idea: SavedIdeaDetail; analysis: SavedAnalysisDetail | null }>(`/api/ideas/${id}`),
 
     deleteIdea: (id: number) => request(`/api/ideas/${id}`, { method: 'DELETE' }),
 };
@@ -112,6 +112,99 @@ export interface Idea {
     targetUsers: string;
     solution: string;
     tagline: string;
+}
+
+export interface SavedIdeaDetail {
+    id: number;
+    domain: string;
+    skills?: string;
+    time_available?: string;
+    budget_level?: string;
+    experience_level?: string;
+    target_users?: string;
+    idea_data?: Idea[];
+    selected_idea?: Idea | null;
+    created_at: string;
+}
+
+export interface SavedAnalysisDetail {
+    id: number;
+    idea_id: number;
+    market?: { marketGap?: string } | null;
+    competitors?: Array<{ name: string; pricing?: string; coreFeatures?: string[]; breach?: string; moat?: string }> | null;
+    feasibility?: {
+        feasibilityScore?: number;
+        scores?: {
+            compositeScore?: number;
+            grade?: string;
+            scoreRationale?: string;
+            technicalFeasibility?: number;
+            marketReadiness?: number;
+            regulatoryRisk?: number;
+            competitiveAdvantage?: number;
+            executionComplexity?: number;
+        };
+    } | null;
+    tech_stack?: string[] | null;
+    monetization?: string[] | null;
+    roadmap?: Array<{ week: string; goal: string; tasks: string[] }> | null;
+    adversarial?: {
+        startupName?: string;
+        tagline?: string;
+        summary?: string;
+        scores?: {
+            compositeScore?: number;
+            grade?: string;
+            scoreRationale?: string;
+            technicalFeasibility?: number;
+            marketReadiness?: number;
+            regulatoryRisk?: number;
+            competitiveAdvantage?: number;
+            executionComplexity?: number;
+        };
+        feasibilityScore?: number;
+        theReaper?: Array<{ point?: string; reason?: string } | string>;
+        thePainMiner?: Array<{ frustration?: string; pain?: string } | string>;
+        pricingArchitect?: {
+            starter?: { price: string; features: string[] };
+            pro?: { price: string; features: string[] };
+            enterprise?: { price: string; features: string[] };
+            [key: string]: unknown;
+        };
+        thePivotMaster?: {
+            winningEdge?: string;
+            [key: string]: unknown;
+        };
+        researchSources?: Array<{ title?: string; url: string }>;
+    } | null;
+    startupName?: string | null;
+    tagline?: string | null;
+    summary?: string | null;
+    scores?: {
+        compositeScore?: number;
+        grade?: string;
+        scoreRationale?: string;
+        technicalFeasibility?: number;
+        marketReadiness?: number;
+        regulatoryRisk?: number;
+        competitiveAdvantage?: number;
+        executionComplexity?: number;
+    } | null;
+    feasibilityScore?: number | null;
+    theReaper?: Array<{ point?: string; reason?: string } | string> | null;
+    thePainMiner?: Array<{ frustration?: string; pain?: string } | string> | null;
+    pricingArchitect?: {
+        starter?: { price: string; features: string[] };
+        pro?: { price: string; features: string[] };
+        enterprise?: { price: string; features: string[] };
+        [key: string]: unknown;
+    } | null;
+    thePivotMaster?: {
+        winningEdge?: string;
+        [key: string]: unknown;
+    } | null;
+    researchSources?: Array<{ title?: string; url: string }> | null;
+    created_at?: string;
 }
 
 export interface ViabilityResult {
@@ -217,11 +310,11 @@ export interface AnalysisResult {
             starter?: { price: string; features: string[] };
             pro?: { price: string; features: string[] };
             enterprise?: { price: string; features: string[] };
-            [key: string]: any;
+            [key: string]: unknown;
         };
         thePivotMaster?: {
             winningEdge?: string;
-            [key: string]: any;
+            [key: string]: unknown;
         };
         researchSources?: Array<{ title?: string; url: string }>;
         roadmap: Array<{
@@ -240,7 +333,14 @@ export interface SavedIdea {
     id: number;
     domain: string;
     selectedIdea: Idea;
-    market: any;
-    feasibility: any;
+    market?: { marketGap?: string } | null;
+    feasibility?: {
+        feasibilityScore?: number;
+        scores?: {
+            compositeScore?: number;
+            grade?: string;
+            scoreRationale?: string;
+        };
+    } | null;
     created_at: string;
 }

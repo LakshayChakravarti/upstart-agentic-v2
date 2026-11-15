@@ -74,6 +74,27 @@ const RUBRIC_DIMENSIONS = Object.freeze([
   },
 ]);
 
+/**
+ * The 6 core quality dimensions shared identically across both single-call and council workflows.
+ * Used exclusively for calculating `sharedAverageScore` to ensure fair, unbiased quality comparison.
+ */
+const SHARED_DIMENSION_IDS = Object.freeze([
+  'completeness',
+  'problemSpecificity',
+  'commercialReasoning',
+  'riskAndFeasibility',
+  'evidenceGrounding',
+  'internalConsistency',
+]);
+
+/**
+ * Dimensions that measure structural or architectural divergence between workflows rather than
+ * shared analytical quality. Reported separately as architectural-diversity metrics.
+ */
+const ARCHITECTURAL_DIMENSION_IDS = Object.freeze([
+  'distinctAnalyticalValue',
+]);
+
 const VALID_SCORE_MIN = 1;
 const VALID_SCORE_MAX = 5;
 
@@ -184,8 +205,12 @@ function evaluateBlueprintQuality(blueprint, benchmarkCase, workflow, options = 
     return {
       scores,
       averageScore: null,
+      sharedAverageScore: null,
       assessedDimensionsCount: 0,
       unassessedDimensionsCount: RUBRIC_DIMENSIONS.length,
+      assessedSharedDimensionsCount: 0,
+      unassessedSharedDimensionsCount: SHARED_DIMENSION_IDS.length,
+      architecturalDiversityScore: null,
     };
   }
 
@@ -596,10 +621,10 @@ function evaluateBlueprintQuality(blueprint, benchmarkCase, workflow, options = 
     }
   }
 
-  // Compute average of assessed dimensions (ignoring nulls)
+  // Compute legacy average of all assessed dimensions (ignoring nulls)
   const assessedValues = Object.values(scores)
     .map(s => s.score)
-    .filter(val => typeof val === 'number' && Number.isFinite(val));
+    .filter(val => typeof val === 'number' && Number.isFinite(val) && val >= VALID_SCORE_MIN && val <= VALID_SCORE_MAX);
 
   const assessedCount = assessedValues.length;
   const unassessedCount = RUBRIC_DIMENSIONS.length - assessedCount;
@@ -608,11 +633,36 @@ function evaluateBlueprintQuality(blueprint, benchmarkCase, workflow, options = 
     ? Number((assessedValues.reduce((acc, v) => acc + v, 0) / assessedCount).toFixed(2))
     : null;
 
+  // Compute fair sharedAverageScore exclusively from the 6 shared dimensions
+  const sharedValues = SHARED_DIMENSION_IDS
+    .map(id => scores[id]?.score)
+    .filter(val => typeof val === 'number' && Number.isFinite(val) && val >= VALID_SCORE_MIN && val <= VALID_SCORE_MAX);
+
+  const assessedSharedCount = sharedValues.length;
+  const unassessedSharedCount = SHARED_DIMENSION_IDS.length - assessedSharedCount;
+
+  const sharedAverageScore = assessedSharedCount > 0
+    ? Number((sharedValues.reduce((acc, v) => acc + v, 0) / assessedSharedCount).toFixed(2))
+    : null;
+
+  // Report distinctAnalyticalValue separately as an architectural diversity metric
+  const architecturalDiversityScore = (
+    scores.distinctAnalyticalValue &&
+    typeof scores.distinctAnalyticalValue.score === 'number' &&
+    Number.isFinite(scores.distinctAnalyticalValue.score) &&
+    scores.distinctAnalyticalValue.score >= VALID_SCORE_MIN &&
+    scores.distinctAnalyticalValue.score <= VALID_SCORE_MAX
+  ) ? scores.distinctAnalyticalValue.score : null;
+
   return {
     scores,
     averageScore,
+    sharedAverageScore,
     assessedDimensionsCount: assessedCount,
     unassessedDimensionsCount: unassessedCount,
+    assessedSharedDimensionsCount: assessedSharedCount,
+    unassessedSharedDimensionsCount: unassessedSharedCount,
+    architecturalDiversityScore,
   };
 }
 
@@ -636,6 +686,8 @@ function validateManualScore(dimId, manualEntry) {
 
 module.exports = {
   RUBRIC_DIMENSIONS,
+  SHARED_DIMENSION_IDS,
+  ARCHITECTURAL_DIMENSION_IDS,
   VALID_SCORE_MIN,
   VALID_SCORE_MAX,
   isValidScore,

@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { apiClient } from '@/lib/api';
+import { apiClient, type SavedIdeaDetail, type SavedAnalysisDetail } from '@/lib/api';
 import { Printer, Trash2, ExternalLink } from 'lucide-react';
 
 export default function SavedIdeaPage() {
@@ -11,7 +11,7 @@ export default function SavedIdeaPage() {
     const params = useParams();
     const id = Number(params.id);
 
-    const [data, setData] = useState<{ idea: any; analysis: any } | null>(null);
+    const [data, setData] = useState<{ idea: SavedIdeaDetail; analysis: SavedAnalysisDetail | null } | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const [deleting, setDeleting] = useState(false);
@@ -22,8 +22,8 @@ export default function SavedIdeaPage() {
         try {
             await apiClient.deleteIdea(id);
             router.push('/saved');
-        } catch (err: any) {
-            setError(err.message || 'Failed to delete idea');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to delete idea');
             setDeleting(false);
         }
     };
@@ -34,7 +34,7 @@ export default function SavedIdeaPage() {
             .then(res => setData(res))
             .catch(err => setError(err.message || 'Failed to load idea'))
             .finally(() => setLoading(false));
-    }, [user, id]);
+    }, [user, id, router]);
 
     if (loading) return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh' }}>
@@ -50,16 +50,24 @@ export default function SavedIdeaPage() {
     );
 
     const { idea, analysis } = data;
-    const selectedIdea = idea.selected_idea;
+    const selectedIdea = idea?.selected_idea;
+    const adv: NonNullable<SavedAnalysisDetail['adversarial']> = analysis?.adversarial || {};
     const bp = analysis ? {
         ...analysis,
-        adversarial: analysis.adversarial,
+        startupName: analysis.startupName || adv.startupName,
+        tagline: analysis.tagline || adv.tagline,
+        summary: analysis.summary || adv.summary,
+        scores: analysis.scores || adv.scores || analysis.feasibility?.scores,
+        feasibilityScore: analysis.feasibilityScore ?? adv.feasibilityScore ?? analysis.feasibility?.feasibilityScore,
+        theReaper: adv.theReaper || analysis.theReaper,
+        thePainMiner: adv.thePainMiner || analysis.thePainMiner,
+        pricingArchitect: adv.pricingArchitect || analysis.pricingArchitect,
+        thePivotMaster: adv.thePivotMaster || analysis.thePivotMaster,
+        researchSources: adv.researchSources || analysis.researchSources,
+        adversarial: adv,
     } : null;
 
-    const feasScore = bp?.scores?.compositeScore ?? bp?.feasibilityScore ?? (bp?.scores?.technicalFeasibility ? Math.round((bp.scores.technicalFeasibility + bp.scores.marketReadiness + bp.scores.regulatoryRisk + bp.scores.competitiveAdvantage + bp.scores.executionComplexity) / 5) : 0);
-    const feasColor = feasScore >= 70 ? 'var(--color-emerald)' : feasScore >= 50 ? 'var(--color-primary)' : 'var(--color-rose)';
-
-    const adv = bp?.adversarial || {};
+    const feasScore = bp?.scores?.compositeScore ?? bp?.feasibilityScore ?? (bp?.scores?.technicalFeasibility ? Math.round((bp.scores.technicalFeasibility + (bp.scores.marketReadiness || 0) + (bp.scores.regulatoryRisk || 0) + (bp.scores.competitiveAdvantage || 0) + (bp.scores.executionComplexity || 0)) / 5) : 0);
 
     return (
         <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '48px 24px 80px' }}>
@@ -74,7 +82,7 @@ export default function SavedIdeaPage() {
                             {bp?.startupName || selectedIdea?.title || 'Untitled'}
                         </h1>
                         <p style={{ fontWeight: 800, fontSize: '1.15rem', background: 'var(--color-primary)', display: 'inline-block', padding: '6px 14px', border: 'var(--border-width) solid var(--color-border)', transform: 'rotate(-1deg)', boxShadow: '4px 4px 0px 0px var(--shadow-color)' }}>
-                            "{bp?.tagline || selectedIdea?.tagline}"
+                            &quot;{bp?.tagline || selectedIdea?.tagline}&quot;
                         </p>
                     </div>
 
@@ -100,7 +108,7 @@ export default function SavedIdeaPage() {
                     <p style={{ fontSize: '1.1rem', fontWeight: 700 }}>No analysis found for this idea.</p>
                 </div>
             ) : (
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', alignItems: 'start' }}>
+                <div className="blueprint-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', alignItems: 'start' }}>
                     
                     {/* Left Column: Adversarial Personas */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -115,7 +123,7 @@ export default function SavedIdeaPage() {
                                     </div>
                                 </div>
                                 <div style={{ padding: '24px' }}>
-                                    <p style={{ fontSize: '1.1rem', fontWeight: 700, lineHeight: '1.8', fontStyle: 'italic', borderLeft: '4px solid var(--color-border)', paddingLeft: '20px' }}>"{bp.summary}"</p>
+                                    <p style={{ fontSize: '1.1rem', fontWeight: 700, lineHeight: '1.8', fontStyle: 'italic', borderLeft: '4px solid var(--color-border)', paddingLeft: '20px' }}>&quot;{bp.summary}&quot;</p>
                                 </div>
                             </div>
                         )}
@@ -132,10 +140,10 @@ export default function SavedIdeaPage() {
                                 </div>
                                 <div style={{ padding: '24px', background: 'var(--color-surface)' }}>
                                     <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                        {adv.theReaper.map((r: any, i: number) => (
+                                        {adv.theReaper.map((r: { point?: string; reason?: string } | string, i: number) => (
                                             <li key={i} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                                                 <span style={{ color: '#ef4444', fontSize: '1.2rem', fontWeight: 900, marginTop: '-2px' }}>✖</span>
-                                                <p style={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.6 }}>{r.point || r.reason || r}</p>
+                                                <p style={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.6 }}>{typeof r === 'string' ? r : (r.point || r.reason || '')}</p>
                                             </li>
                                         ))}
                                     </ul>
@@ -155,9 +163,9 @@ export default function SavedIdeaPage() {
                                 </div>
                                 <div style={{ padding: '24px', background: 'var(--color-surface)' }}>
                                     <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                        {adv.thePainMiner.map((p: any, i: number) => (
+                                        {adv.thePainMiner.map((p: { frustration?: string; pain?: string } | string, i: number) => (
                                             <li key={i} style={{ padding: '12px 16px', background: 'var(--color-bg)', border: '2px solid var(--color-border)', borderRadius: 'var(--border-radius)', boxShadow: '2px 2px 0px 0px var(--shadow-color)' }}>
-                                                <p style={{ fontSize: '0.95rem', fontWeight: 700, lineHeight: 1.5 }}>"{p.frustration || p.pain || p}"</p>
+                                                <p style={{ fontSize: '0.95rem', fontWeight: 700, lineHeight: 1.5 }}>&quot;{(p as { frustration?: string; pain?: string }).frustration || (p as { pain?: string }).pain || String(p)}&quot;</p>
                                             </li>
                                         ))}
                                     </ul>
@@ -176,8 +184,8 @@ export default function SavedIdeaPage() {
                                 </div>
                                 <div style={{ padding: '24px', background: 'var(--color-surface)' }}>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
-                                        {['starter', 'pro', 'enterprise'].map((tier, idx) => {
-                                            const tierData = adv.pricingArchitect[tier];
+                                        {(['starter', 'pro', 'enterprise'] as const).map((tier, idx) => {
+                                            const tierData = adv.pricingArchitect?.[tier];
                                             if (!tierData) return null;
                                             return (
                                                 <div key={tier} style={{ padding: '16px', background: idx === 1 ? 'var(--color-primary)' : 'var(--color-bg)', border: 'var(--border-width) solid var(--color-border)', borderRadius: 'var(--border-radius)', boxShadow: '4px 4px 0px 0px var(--shadow-color)' }}>
@@ -223,7 +231,7 @@ export default function SavedIdeaPage() {
                             <div style={{ padding: '20px', background: 'var(--color-surface)' }}>
                                 {(adv.researchSources && adv.researchSources.length > 0) ? (
                                     <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                        {adv.researchSources.map((source: any, i: number) => (
+                                        {adv.researchSources.map((source: { url: string; title?: string }, i: number) => (
                                             <li key={i}>
                                                 <a href={source.url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', padding: '12px', background: 'var(--color-bg)', border: '2px solid var(--color-border)', borderRadius: 'var(--border-radius)', textDecoration: 'none', color: 'var(--color-text-1)', boxShadow: '2px 2px 0px 0px var(--shadow-color)', transition: 'transform 0.1s' }} onMouseOver={e => e.currentTarget.style.transform = 'translate(-2px, -2px)'} onMouseOut={e => e.currentTarget.style.transform = 'translate(0,0)'}>
                                                     <p style={{ fontSize: '0.82rem', fontWeight: 800, marginBottom: '4px', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{source.title || new URL(source.url).hostname}</p>

@@ -24,11 +24,15 @@ const { describe, test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const {
+  BENCHMARK_DATASET_VERSION,
+  HISTORICAL_PILOT_CASE_IDS,
   BENCHMARK_CASES,
   getBenchmarkCase,
   getAllBenchmarkCases,
   createDeterministicMockGemini,
   RUBRIC_DIMENSIONS,
+  SHARED_DIMENSION_IDS,
+  ARCHITECTURAL_DIMENSION_IDS,
   VALID_SCORE_MIN,
   VALID_SCORE_MAX,
   isValidScore,
@@ -44,18 +48,18 @@ const { analyzeIdeaBusinessBlueprint } = require('../services/aiService');
 
 describe('Phase 4A — Evaluation Framework Tests', () => {
 
-  // Test 1: All three benchmark cases load correctly
-  test('1. All three benchmark cases load correctly with required metadata and considerations', () => {
+  // Test 1: All benchmark cases load correctly
+  test('1. Benchmark cases load correctly with required metadata and considerations (12 cases)', () => {
     const cases = getAllBenchmarkCases();
-    assert.equal(cases.length, 3, 'Must contain exactly 3 benchmark cases');
+    assert.equal(cases.length, 12, 'Must contain exactly 12 benchmark cases');
 
-    const expectedIds = [
+    const expectedHistoricalIds = [
       'crowded-market-weak-differentiation',
       'specific-problem-uncertain-wtp',
       'attractive-idea-high-regulatory-risk',
     ];
     const actualIds = cases.map(c => c.id);
-    assert.deepEqual(actualIds, expectedIds);
+    assert.deepEqual(actualIds.slice(0, 3), expectedHistoricalIds, 'Historical case IDs must be preserved at indices 0..2');
 
     for (const bCase of cases) {
       assert.ok(bCase.id, 'Case must have id');
@@ -320,18 +324,18 @@ describe('Phase 4A — Evaluation Framework Tests', () => {
 
     const summary = await runComparativeEvaluation(cases);
 
-    assert.equal(summary.evaluatedCasesCount, 3);
+    assert.equal(summary.evaluatedCasesCount, 12);
     assert.ok(summary.workflows.single_call);
     assert.ok(summary.workflows.council);
 
     // Verify single-call averaged 1 call per run
     assert.equal(summary.workflows.single_call.averageModelCalls, 1.0);
-    assert.equal(summary.workflows.single_call.runsCount, 3);
+    assert.equal(summary.workflows.single_call.runsCount, 12);
     assert.equal(summary.workflows.single_call.schemaValidRate, 1.0);
 
     // Verify council averaged 5 calls per run
     assert.equal(summary.workflows.council.averageModelCalls, 5.0);
-    assert.equal(summary.workflows.council.runsCount, 3);
+    assert.equal(summary.workflows.council.runsCount, 12);
     assert.equal(summary.workflows.council.schemaValidRate, 1.0);
     assert.equal(summary.workflows.council.fallbackRate, 0.0);
 
@@ -654,6 +658,594 @@ describe('Phase 4A — Evaluation Framework Tests', () => {
     assert.equal(
       substantiveQA.scores.completeness.score, 5,
       `Substantive persona sections must score 5, got ${substantiveQA.scores.completeness.score}`
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // Phase 4C-3: Fair Evaluation Metrics Tests
+  // -------------------------------------------------------------------------
+
+  // Test 16: Identical shared-dimension content produces identical sharedAverageScore for both workflows
+  test('16. Identical shared-dimension content produces identical sharedAverageScore for single_call and council', () => {
+    const bCase = getBenchmarkCase('crowded-market-weak-differentiation');
+
+    const blueprint = {
+      startupName: 'SharedBenchmarkCo',
+      tagline: 'Developer-native CRM sync platform',
+      summary: 'Automated bidirectional data sync between Salesforce and GitHub pull requests.',
+      scores: {
+        technicalFeasibility: 75,
+        marketReadiness: 65,
+        regulatoryRisk: 30,
+        competitiveAdvantage: 70,
+        executionComplexity: 45,
+        scoreRationale: 'Strong technical grounding with established API webhooks; high competition acknowledged in go-to-market plan.',
+      },
+      pricingArchitect: {
+        starter: { price: '$49/mo', features: ['5 repos', 'Standard webhooks'] },
+        pro: { price: '$199/mo', features: ['Unlimited repos', 'GraphQL subscription mesh'] },
+        enterprise: { price: '$999/mo', features: ['Custom field mapping', 'Dedicated VPC', 'SSO'] },
+      },
+      theReaper: [
+        { point: 'Salesforce native tooling or Microsoft Copilot bundle CRM integration directly into workspace tiers at nominal marginal cost.' },
+        { point: 'GitHub API breaking changes or rate-limiting on enterprise orgs could interrupt sync pipelines without custom cache architecture.' },
+      ],
+      thePainMiner: [
+        { frustration: 'Engineering leaders spend 8 hours per sprint reconciling manual Jira status updates with CRM sales stages.' },
+        { frustration: 'Enterprise developers lack visibility into which pull requests correspond to pipeline deals, stalling enterprise closes.' },
+      ],
+      thePivotMaster: {
+        winningEdge: 'Focus exclusively on developer teams building mission-critical B2B pipelines where compliance audit trails between code and CRM records are mandatory.',
+      },
+      researchSources: ['https://example.com/crm-developer-market'],
+      ragGrounded: true,
+      ragDiagnostics: { status: 'grounded', reason: 'OK' },
+    };
+
+    const singleQA = evaluateBlueprintQuality(blueprint, bCase, 'single_call');
+    const councilQA = evaluateBlueprintQuality(blueprint, bCase, 'council');
+
+    // Verify distinctAnalyticalValue differs due to workflow structure
+    assert.ok(singleQA.scores.distinctAnalyticalValue.score <= 2, 'single_call distinctAnalyticalValue must be <= 2');
+    assert.ok(councilQA.scores.distinctAnalyticalValue.score >= 3, 'council distinctAnalyticalValue must be >= 3');
+
+    // Legacy averageScore favored council because of distinctAnalyticalValue
+    assert.notEqual(
+      singleQA.averageScore,
+      councilQA.averageScore,
+      'Legacy averageScore differs because it includes distinctAnalyticalValue'
+    );
+    assert.ok(
+      councilQA.averageScore > singleQA.averageScore,
+      'Legacy averageScore mechanically favored council'
+    );
+
+    // CRITICAL: sharedAverageScore must be strictly identical between single_call and council
+    assert.equal(
+      singleQA.sharedAverageScore,
+      councilQA.sharedAverageScore,
+      'sharedAverageScore must be identical for single_call and council given identical shared content'
+    );
+    assert.equal(typeof singleQA.sharedAverageScore, 'number');
+    assert.ok(singleQA.sharedAverageScore >= VALID_SCORE_MIN && singleQA.sharedAverageScore <= VALID_SCORE_MAX);
+    assert.equal(singleQA.assessedSharedDimensionsCount, 6);
+    assert.equal(councilQA.assessedSharedDimensionsCount, 6);
+  });
+
+  // Test 17: Changing only distinctAnalyticalValue does not change sharedAverageScore
+  test('17. Changing only distinctAnalyticalValue does not alter sharedAverageScore', () => {
+    const bCase = getBenchmarkCase('crowded-market-weak-differentiation');
+
+    const blueprint = {
+      startupName: 'IsoMetricCo',
+      tagline: 'Test platform',
+      summary: 'Test summary',
+      scores: { technicalFeasibility: 50, marketReadiness: 50, scoreRationale: 'Rationale' },
+    };
+
+    // Fix the 6 shared dimensions to explicit constant manual scores
+    const fixedSharedScores = {
+      completeness: { score: 4, rationale: 'Standard completeness' },
+      problemSpecificity: { score: 4, rationale: 'Standard specificity' },
+      commercialReasoning: { score: 4, rationale: 'Standard pricing' },
+      riskAndFeasibility: { score: 4, rationale: 'Standard risk' },
+      evidenceGrounding: { score: 4, rationale: 'Standard grounding' },
+      internalConsistency: { score: 4, rationale: 'Standard consistency' },
+    };
+
+    const expectedSharedMean = 4.0;
+
+    // Test across distinctAnalyticalValue = 1, 2, 3, 4, 5, and null
+    const diversityVariations = [1, 2, 3, 4, 5, null];
+
+    for (const diversityScore of diversityVariations) {
+      const manualScores = {
+        ...fixedSharedScores,
+        distinctAnalyticalValue: {
+          score: diversityScore,
+          rationale: `Diversity variation score ${diversityScore}`,
+        },
+      };
+
+      const result = evaluateBlueprintQuality(blueprint, bCase, 'council', { manualScores });
+
+      // sharedAverageScore must stay exactly 4.0 regardless of distinctAnalyticalValue
+      assert.equal(
+        result.sharedAverageScore,
+        expectedSharedMean,
+        `sharedAverageScore must remain 4.0 when distinctAnalyticalValue is ${diversityScore}`
+      );
+
+      // architecturalDiversityScore must faithfully reflect the diversity dimension
+      assert.equal(
+        result.architecturalDiversityScore,
+        diversityScore,
+        `architecturalDiversityScore must match ${diversityScore}`
+      );
+
+      // Legacy averageScore reflects the 7th dimension
+      if (diversityScore !== null) {
+        const expectedLegacy = Number(((24 + diversityScore) / 7).toFixed(2));
+        assert.equal(result.averageScore, expectedLegacy);
+      } else {
+        // If 7th dimension is null, legacy average is 24/6 = 4.0
+        assert.equal(result.averageScore, 4.0);
+      }
+    }
+  });
+
+  // Test 18: Missing, null, or invalid scores are handled honestly without default coercion
+  test('18. Missing, unassessed, or partially assessed shared dimensions are handled honestly', () => {
+    const bCase = getBenchmarkCase('specific-problem-uncertain-wtp');
+
+    // Blueprint evaluated with null payload produces null for both averages
+    const nullPayloadResult = evaluateBlueprintQuality(null, bCase, 'single_call');
+    assert.equal(nullPayloadResult.sharedAverageScore, null, 'Null blueprint must have null sharedAverageScore');
+    assert.equal(nullPayloadResult.averageScore, null, 'Null blueprint must have null legacy averageScore');
+    assert.equal(nullPayloadResult.assessedSharedDimensionsCount, 0);
+    assert.equal(nullPayloadResult.unassessedSharedDimensionsCount, 6);
+    assert.equal(nullPayloadResult.architecturalDiversityScore, null);
+
+    // Partially assessed blueprint: 3 assessed shared dimensions (scores: 3, 4, 5) and 3 null
+    const partiallyAssessedScores = {
+      completeness: { score: 3, rationale: 'Assessed' },
+      problemSpecificity: { score: 4, rationale: 'Assessed' },
+      commercialReasoning: { score: 5, rationale: 'Assessed' },
+      riskAndFeasibility: { score: null, rationale: 'Unassessed' },
+      evidenceGrounding: { score: null, rationale: 'Unassessed' },
+      internalConsistency: { score: null, rationale: 'Unassessed' },
+      distinctAnalyticalValue: { score: 1, rationale: 'Diversity' },
+    };
+
+    const partialResult = evaluateBlueprintQuality(
+      { startupName: 'Part', tagline: 'P', summary: 'S' },
+      bCase,
+      'single_call',
+      { manualScores: partiallyAssessedScores }
+    );
+
+    // Shared average should be (3 + 4 + 5) / 3 = 4.0
+    assert.equal(partialResult.sharedAverageScore, 4.0, 'Partial shared average must average only assessed shared dimensions');
+    assert.equal(partialResult.assessedSharedDimensionsCount, 3);
+    assert.equal(partialResult.unassessedSharedDimensionsCount, 3);
+
+    // Output with ALL shared dimensions unassessed has null sharedAverageScore
+    const allSharedNull = {
+      completeness: { score: null, rationale: 'Unassessed' },
+      problemSpecificity: { score: null, rationale: 'Unassessed' },
+      commercialReasoning: { score: null, rationale: 'Unassessed' },
+      riskAndFeasibility: { score: null, rationale: 'Unassessed' },
+      evidenceGrounding: { score: null, rationale: 'Unassessed' },
+      internalConsistency: { score: null, rationale: 'Unassessed' },
+      distinctAnalyticalValue: { score: 4, rationale: 'Assessed diversity' },
+    };
+
+    const allNullResult = evaluateBlueprintQuality(
+      { startupName: 'AllNull', tagline: 'A', summary: 'S' },
+      bCase,
+      'single_call',
+      { manualScores: allSharedNull }
+    );
+
+    assert.equal(allNullResult.sharedAverageScore, null, 'Must be null when no shared dimensions are assessable');
+    assert.equal(allNullResult.assessedSharedDimensionsCount, 0);
+    assert.equal(allNullResult.unassessedSharedDimensionsCount, 6);
+    assert.equal(allNullResult.architecturalDiversityScore, 4);
+    assert.equal(allNullResult.averageScore, 4.0, 'Legacy average reflects the lone assessed dimension');
+  });
+
+  // Test 19: Workflow aggregation calculates overallSharedAverageQuality and averageArchitecturalDiversity
+  test('19. Workflow aggregation separates shared quality from architectural diversity for fair comparison', () => {
+    // Two mock runs for single_call and council where shared dimensions are equal in quality (all 4)
+    // but distinctAnalyticalValue reflects architectural differences (2 for single_call, 5 for council)
+    const singleCallRuns = [
+      {
+        workflow: 'single_call',
+        completed: true,
+        fallbackUsed: false,
+        schemaValid: true,
+        modelCallCount: 1,
+        qualityAssessment: {
+          scores: {
+            completeness: { score: 4, rationale: 'r' },
+            problemSpecificity: { score: 4, rationale: 'r' },
+            commercialReasoning: { score: 4, rationale: 'r' },
+            riskAndFeasibility: { score: 4, rationale: 'r' },
+            distinctAnalyticalValue: { score: 2, rationale: 'No persona separation by design' },
+            evidenceGrounding: { score: 4, rationale: 'r' },
+            internalConsistency: { score: 4, rationale: 'r' },
+          },
+        },
+      },
+    ];
+
+    const councilRuns = [
+      {
+        workflow: 'council',
+        completed: true,
+        fallbackUsed: false,
+        schemaValid: true,
+        modelCallCount: 5,
+        qualityAssessment: {
+          scores: {
+            completeness: { score: 4, rationale: 'r' },
+            problemSpecificity: { score: 4, rationale: 'r' },
+            commercialReasoning: { score: 4, rationale: 'r' },
+            riskAndFeasibility: { score: 4, rationale: 'r' },
+            distinctAnalyticalValue: { score: 5, rationale: 'High specialist divergence' },
+            evidenceGrounding: { score: 4, rationale: 'r' },
+            internalConsistency: { score: 4, rationale: 'r' },
+          },
+        },
+      },
+    ];
+
+    const scAgg = aggregateWorkflowMetrics(singleCallRuns);
+    const ccAgg = aggregateWorkflowMetrics(councilRuns);
+
+    // Primary fair comparison metric: overallSharedAverageQuality must be equal
+    assert.equal(scAgg.overallSharedAverageQuality, 4.0, 'Single-call shared quality must be 4.0');
+    assert.equal(ccAgg.overallSharedAverageQuality, 4.0, 'Council shared quality must be 4.0');
+    assert.equal(
+      scAgg.overallSharedAverageQuality,
+      ccAgg.overallSharedAverageQuality,
+      'Fair comparison metric must show identical shared quality when analytical content is equal'
+    );
+
+    // Architectural diversity is reported separately
+    assert.equal(scAgg.averageArchitecturalDiversity, 2.0);
+    assert.equal(ccAgg.averageArchitecturalDiversity, 5.0);
+
+    // Legacy metric shows the historical architectural bias
+    assert.equal(scAgg.overallAverageQuality, Number((26 / 7).toFixed(2))); // ~3.71
+    assert.equal(ccAgg.overallAverageQuality, Number((29 / 7).toFixed(2))); // ~4.14
+    assert.ok(
+      ccAgg.overallAverageQuality > scAgg.overallAverageQuality,
+      'Legacy metric shows mechanical council advantage that fair metric eliminates'
+    );
+  });
+
+  // Test 20: Formatted report cleanly separates shared quality from architectural diversity
+  test('20. Formatted report displays Shared Quality Score and Architectural Diversity Score separately', () => {
+    const summary = {
+      evaluatedCasesCount: 1,
+      workflows: {
+        single_call: {
+          runsCount: 1,
+          schemaValidRate: 1.0,
+          completionRate: 1.0,
+          fallbackRate: 0.0,
+          averageModelCalls: 1.0,
+          overallSharedAverageQuality: 4.25,
+          averageArchitecturalDiversity: 2.0,
+          overallAverageQuality: 3.93,
+          averageQualityByDimension: {
+            completeness: 4.0,
+            problemSpecificity: 4.0,
+            commercialReasoning: 4.0,
+            riskAndFeasibility: 4.0,
+            distinctAnalyticalValue: 2.0,
+            evidenceGrounding: 5.0,
+            internalConsistency: 4.5,
+          },
+          perCaseResults: [
+            {
+              caseId: 'test-case-1',
+              caseName: 'Test Case 1',
+              modelCallCount: 1,
+              schemaValid: true,
+              qualityAssessment: {
+                sharedAverageScore: 4.25,
+                architecturalDiversityScore: 2.0,
+                averageScore: 3.93,
+              },
+            },
+          ],
+        },
+        council: {
+          runsCount: 1,
+          schemaValidRate: 1.0,
+          completionRate: 1.0,
+          fallbackRate: 0.0,
+          averageModelCalls: 5.0,
+          overallSharedAverageQuality: 4.25,
+          averageArchitecturalDiversity: 4.0,
+          overallAverageQuality: 4.21,
+          averageQualityByDimension: {
+            completeness: 4.0,
+            problemSpecificity: 4.0,
+            commercialReasoning: 4.0,
+            riskAndFeasibility: 4.0,
+            distinctAnalyticalValue: 4.0,
+            evidenceGrounding: 5.0,
+            internalConsistency: 4.5,
+          },
+          perCaseResults: [
+            {
+              caseId: 'test-case-1',
+              caseName: 'Test Case 1',
+              modelCallCount: 5,
+              schemaValid: true,
+              fallbackUsed: false,
+              qualityAssessment: {
+                sharedAverageScore: 4.25,
+                architecturalDiversityScore: 4.0,
+                averageScore: 4.21,
+              },
+            },
+          ],
+        },
+      },
+      operationalTradeoff: {
+        modelCallRatio: '5 calls vs 1 call',
+        latencyNote: 'Mocked durations',
+        tokenUsageNote: 'Token counts unavailable',
+      },
+    };
+
+    const report = formatEvaluationReport(summary);
+
+    // Check headings and sections
+    assert.ok(report.includes('Operational Comparison'));
+    assert.ok(report.includes('Shared Quality Score (Fair Comparison)'));
+    assert.ok(report.includes('Architectural Diversity Score'));
+    assert.ok(report.includes('Legacy Overall Average (7-dimension)'));
+    assert.ok(report.includes('Fair Comparison Notice'));
+    assert.ok(report.includes('[Shared]'));
+    assert.ok(report.includes('[Architectural Diversity]'));
+    assert.ok(report.includes('Shared Quality: 4.25'));
+    assert.ok(report.includes('Diversity: 2'));
+    assert.ok(report.includes('Diversity: 4'));
+  });
+
+  // Test 21: Backward compatibility of output shapes, manual overrides, and exported symbols
+  test('21. Backward compatibility: existing contracts, exported symbols, and manual overrides remain intact', () => {
+    // 1. Verify exported constants
+    assert.equal(BENCHMARK_DATASET_VERSION, '2.0.0');
+    assert.deepEqual(HISTORICAL_PILOT_CASE_IDS, [
+      'crowded-market-weak-differentiation',
+      'specific-problem-uncertain-wtp',
+      'attractive-idea-high-regulatory-risk',
+    ]);
+    assert.ok(Array.isArray(SHARED_DIMENSION_IDS));
+    assert.equal(SHARED_DIMENSION_IDS.length, 6);
+    assert.ok(Array.isArray(ARCHITECTURAL_DIMENSION_IDS));
+    assert.equal(ARCHITECTURAL_DIMENSION_IDS.length, 1);
+    assert.equal(ARCHITECTURAL_DIMENSION_IDS[0], 'distinctAnalyticalValue');
+
+    // 2. Verify return structure of evaluateBlueprintQuality
+    const bCase = getBenchmarkCase('crowded-market-weak-differentiation');
+    const result = evaluateBlueprintQuality(
+      {
+        startupName: 'CompatTest',
+        tagline: 'Tag',
+        summary: 'Summary',
+        scores: { technicalFeasibility: 50, marketReadiness: 50, scoreRationale: 'Rationale' },
+      },
+      bCase,
+      'single_call'
+    );
+
+    assert.ok(result.hasOwnProperty('scores'), 'Must have scores');
+    assert.ok(result.hasOwnProperty('averageScore'), 'Must preserve legacy averageScore');
+    assert.ok(result.hasOwnProperty('sharedAverageScore'), 'Must have sharedAverageScore');
+    assert.ok(result.hasOwnProperty('assessedDimensionsCount'), 'Must preserve assessedDimensionsCount');
+    assert.ok(result.hasOwnProperty('unassessedDimensionsCount'), 'Must preserve unassessedDimensionsCount');
+    assert.ok(result.hasOwnProperty('assessedSharedDimensionsCount'), 'Must have assessedSharedDimensionsCount');
+    assert.ok(result.hasOwnProperty('unassessedSharedDimensionsCount'), 'Must have unassessedSharedDimensionsCount');
+    assert.ok(result.hasOwnProperty('architecturalDiversityScore'), 'Must have architecturalDiversityScore');
+
+    // 3. Verify manual score overrides work identically
+    const manualResult = evaluateBlueprintQuality(
+      { startupName: 'M', tagline: 'm', summary: 's' },
+      bCase,
+      'single_call',
+      {
+        manualScores: {
+          problemSpecificity: { score: 5, rationale: 'Manual override specificity' },
+        },
+      }
+    );
+    assert.equal(manualResult.scores.problemSpecificity.score, 5);
+    assert.equal(manualResult.scores.problemSpecificity.rationale, 'Manual override specificity');
+  });
+
+  // Test 22: Phase 4C-7 Expanded 12-case benchmark contract and safety verification
+  test('22. Phase 4C-7: Expanded 12-case benchmark contract and safety verification', async () => {
+    const cases = getAllBenchmarkCases();
+
+    // 1. Exactly 12 benchmark cases are returned by canonical dataset API
+    assert.equal(cases.length, 12, 'Exactly 12 benchmark cases must be returned');
+
+    // 2. All case IDs are unique
+    const caseIds = cases.map((c) => c.id);
+    const uniqueIds = new Set(caseIds);
+    assert.equal(uniqueIds.size, 12, 'All 12 case IDs must be unique');
+
+    // 3. The three historical case IDs remain unchanged and present
+    const expectedHistoricalIds = [
+      'crowded-market-weak-differentiation',
+      'specific-problem-uncertain-wtp',
+      'attractive-idea-high-regulatory-risk',
+    ];
+    for (const hId of expectedHistoricalIds) {
+      assert.ok(caseIds.includes(hId), `Historical case ID "${hId}" must be present`);
+      const hCase = getBenchmarkCase(hId);
+      assert.equal(hCase.id, hId);
+    }
+
+    // 4, 5, 6, 7, 8. Check schema fields, challenges, behaviors, synthetic labels, diagnostic dimensions, no hard-coded winner
+    const challenges = new Set();
+    for (const bCase of cases) {
+      assert.ok(bCase.id && typeof bCase.id === 'string', 'Case must have string id');
+      assert.ok(bCase.name && typeof bCase.name === 'string', 'Case must have string name');
+      assert.ok(bCase.category && typeof bCase.category === 'string', 'Case must have string category');
+
+      // Idea contract
+      assert.ok(bCase.idea && typeof bCase.idea === 'object');
+      assert.ok(bCase.idea.title && typeof bCase.idea.title === 'string');
+      assert.ok(bCase.idea.problem && typeof bCase.idea.problem === 'string');
+      assert.ok(bCase.idea.solution && typeof bCase.idea.solution === 'string');
+
+      // Profile & Research
+      assert.ok(bCase.userProfile && typeof bCase.userProfile === 'object');
+      assert.ok(Array.isArray(bCase.researchSources) && bCase.researchSources.length > 0);
+      assert.ok(typeof bCase.researchContext === 'string' && bCase.researchContext.includes('Source 1'));
+
+      // 6. Synthetic research context clearly labelled
+      assert.ok(
+        bCase.researchContext.includes('[SYNTHETIC BENCHMARK FIXTURE]'),
+        `Case "${bCase.id}" must clearly label synthetic research context`
+      );
+
+      // 5. Distinct, non-empty reasoning challenges and expected behaviours
+      assert.ok(
+        typeof bCase.analyticalChallenge === 'string' && bCase.analyticalChallenge.trim().length > 10,
+        `Case "${bCase.id}" must have non-empty analyticalChallenge`
+      );
+      assert.ok(!challenges.has(bCase.analyticalChallenge), `Analytical challenge for "${bCase.id}" must be distinct`);
+      challenges.add(bCase.analyticalChallenge);
+
+      assert.ok(
+        Array.isArray(bCase.expectedStrongBehaviors) && bCase.expectedStrongBehaviors.length >= 2,
+        `Case "${bCase.id}" must have at least 2 expectedStrongBehaviors`
+      );
+      for (const behavior of bCase.expectedStrongBehaviors) {
+        assert.ok(typeof behavior === 'string' && behavior.trim(), 'Behaviors must be non-empty strings');
+      }
+
+      assert.ok(
+        Array.isArray(bCase.importantFailureSignals) && bCase.importantFailureSignals.length >= 2,
+        `Case "${bCase.id}" must have at least 2 importantFailureSignals`
+      );
+      for (const signal of bCase.importantFailureSignals) {
+        assert.ok(typeof signal === 'string' && signal.trim(), 'Failure signals must be non-empty strings');
+      }
+
+      // 7. Case-specific diagnostic dimensions refer only to valid shared dimensions
+      assert.ok(
+        Array.isArray(bCase.diagnosticDimensions) && bCase.diagnosticDimensions.length > 0,
+        `Case "${bCase.id}" must specify diagnosticDimensions`
+      );
+      for (const dim of bCase.diagnosticDimensions) {
+        assert.ok(
+          SHARED_DIMENSION_IDS.includes(dim),
+          `Diagnostic dimension "${dim}" in case "${bCase.id}" must be a valid shared dimension (${SHARED_DIMENSION_IDS.join(', ')})`
+        );
+      }
+
+      // Considerations & Mock responses
+      assert.ok(bCase.evaluationConsiderations && typeof bCase.evaluationConsiderations === 'object');
+      assert.ok(bCase.mockResponses && typeof bCase.mockResponses === 'object');
+      assert.ok(bCase.mockResponses.singleCall && typeof bCase.mockResponses.singleCall === 'object');
+      assert.ok(bCase.mockResponses.council && typeof bCase.mockResponses.council === 'object');
+      assert.ok(bCase.mockResponses.council.synthesis && typeof bCase.mockResponses.council.synthesis === 'object');
+
+      // 8. No case encodes a hard-coded workflow winner
+      assert.equal(bCase.winner, undefined, `Case "${bCase.id}" must not encode a hard-coded winner`);
+      assert.equal(bCase.mockResponses.winner, undefined, `Case "${bCase.id}" mockResponses must not encode a hard-coded winner`);
+    }
+
+    // 9. Historical artifact case lookups continue to work
+    for (const hId of expectedHistoricalIds) {
+      const historicalCase = getBenchmarkCase(hId);
+      assert.equal(historicalCase.id, hId);
+      assert.ok(historicalCase.mockResponses.singleCall.startupName);
+      assert.ok(historicalCase.mockResponses.council.synthesis.startupName);
+    }
+
+    // 10. The dataset can be loaded and evaluated without provider credentials, network access, or database access
+    const mockGemini = createDeterministicMockGemini('technical-infeasibility-complexity');
+    assert.equal(typeof mockGemini, 'function');
+    const singleResult = await runCaseEvaluation(getBenchmarkCase('technical-infeasibility-complexity'), 'single_call');
+    assert.equal(singleResult.completed, true);
+    assert.equal(singleResult.schemaValid, true);
+    assert.equal(singleResult.modelCallCount, 1);
+  });
+
+  // Test 23: Phase 4C-8 Benchmark Integrity, Information Symmetry, and Persona Contract Audit
+  test('23. Phase 4C-8: Benchmark integrity, information symmetry, and persona contract audit', async () => {
+    const cases = getAllBenchmarkCases();
+    assert.equal(cases.length, 12, 'Must audit exactly 12 cases');
+
+    let scWinsOrTies = 0;
+
+    for (const bCase of cases) {
+      // 1. Explicit targetBuyer on idea across all 12 cases
+      assert.ok(
+        typeof bCase.idea.targetBuyer === 'string' && bCase.idea.targetBuyer.trim().length > 0,
+        `Case "${bCase.id}" must have explicit targetBuyer on idea object`
+      );
+
+      // 2. Scenario integrity: No leading answer or verdict leakage in problem/solution
+      const scenarioText = `${bCase.idea.title} ${bCase.idea.problem} ${bCase.idea.solution}`.toLowerCase();
+      assert.ok(!scenarioText.includes('recommended pivot'), `Case "${bCase.id}" must not leak pivot recommendations in problem/solution`);
+      assert.ok(!scenarioText.includes('winning workflow'), `Case "${bCase.id}" must not leak workflow preferences`);
+
+      // 3. Exact Council Persona Schemas
+      const r = bCase.mockResponses.council.personaReaper;
+      assert.ok(r && Array.isArray(r.theReaper) && r.theReaper.length >= 2, `personaReaper in "${bCase.id}" must have valid theReaper array`);
+      for (const pt of r.theReaper) {
+        assert.ok(typeof pt.point === 'string' && pt.point.trim().length > 10, 'Reaper point must be substantive');
+      }
+
+      const p = bCase.mockResponses.council.personaPainMiner;
+      assert.ok(p && Array.isArray(p.thePainMiner) && p.thePainMiner.length >= 2, `personaPainMiner in "${bCase.id}" must have valid thePainMiner array`);
+      for (const fr of p.thePainMiner) {
+        assert.ok(typeof fr.frustration === 'string' && fr.frustration.trim().length > 10, 'PainMiner frustration must be substantive');
+      }
+
+      const pr = bCase.mockResponses.council.personaPricingArchitect;
+      assert.ok(pr && pr.pricingArchitect && typeof pr.pricingArchitect === 'object', `personaPricingArchitect in "${bCase.id}" must have pricingArchitect`);
+      for (const tier of ['starter', 'pro', 'enterprise']) {
+        assert.ok(pr.pricingArchitect[tier] && typeof pr.pricingArchitect[tier].price === 'string', `Pricing tier ${tier} must have price in "${bCase.id}"`);
+        assert.ok(Array.isArray(pr.pricingArchitect[tier].features) && pr.pricingArchitect[tier].features.length > 0, `Pricing tier ${tier} must have features in "${bCase.id}"`);
+      }
+
+      const pv = bCase.mockResponses.council.personaPivotMaster;
+      assert.ok(pv && pv.thePivotMaster && typeof pv.thePivotMaster.winningEdge === 'string', `personaPivotMaster in "${bCase.id}" must have thePivotMaster.winningEdge`);
+      assert.ok(pv.thePivotMaster.winningEdge.trim().length > 20, 'winningEdge must be substantive');
+
+      // 4. Quality evaluation symmetry: single-call is not a weak strawman
+      const scQuality = evaluateBlueprintQuality(bCase.mockResponses.singleCall, bCase, 'single_call');
+      const ccQuality = evaluateBlueprintQuality(bCase.mockResponses.council.synthesis, bCase, 'council');
+
+      assert.ok(scQuality.sharedAverageScore >= 3.5, `Single-call shared average (${scQuality.sharedAverageScore}) in "${bCase.id}" must meet substantive baseline`);
+      assert.ok(ccQuality.sharedAverageScore >= 3.5, `Council shared average (${ccQuality.sharedAverageScore}) in "${bCase.id}" must meet substantive baseline`);
+
+      // Architectural diversity score is structurally 2 for single_call and >= 4 for council
+      assert.equal(scQuality.architecturalDiversityScore, 2, 'Single-call diversity must remain 2');
+      assert.ok(ccQuality.architecturalDiversityScore >= 4, 'Council diversity must remain >= 4');
+
+      if (scQuality.sharedAverageScore >= ccQuality.sharedAverageScore) {
+        scWinsOrTies++;
+      }
+    }
+
+    // 5. Ensure benchmark has balanced competitive tension (single-call ties or beats council on at least 4 cases)
+    assert.ok(
+      scWinsOrTies >= 4,
+      `Benchmark must have balanced competitive tension: single-call tied or beat council on ${scWinsOrTies}/12 cases (expected >= 4)`
     );
   });
 

@@ -709,3 +709,10 @@ body::before {
 .delay-700 {
   animation-delay: 0.7s;
 }
+
+/* ── Mobile responsive layout ─────────────────────── */
+@media (max-width: 768px) {
+  .blueprint-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

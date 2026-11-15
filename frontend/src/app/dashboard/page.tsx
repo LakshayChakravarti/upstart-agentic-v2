@@ -17,13 +17,16 @@ export default function DashboardPage() {
         if (!user) { router.push('/login'); return; }
         const stored = sessionStorage.getItem('upstart_analysis');
         if (!stored) { router.push('/ideas'); return; }
-        setAnalysis(JSON.parse(stored));
+        const timer = setTimeout(() => {
+            setAnalysis(JSON.parse(stored));
+        }, 0);
+        return () => clearTimeout(timer);
     }, [user, authLoading, router]);
 
     const handleSave = async () => {
         if (!analysis || saving || saved) return;
         setSaving(true);
-        try { await apiClient.saveIdea(analysis.ideaSessionId); setSaved(true); } catch (e) { }
+        try { await apiClient.saveIdea(analysis.ideaSessionId); setSaved(true); } catch { }
         setSaving(false);
     };
 
@@ -34,10 +37,9 @@ export default function DashboardPage() {
     );
 
     const { selectedIdea: idea, blueprint: bp } = analysis;
-    const adv: any = bp || {}; // Top-level properties in dashboard memory
+    const adv = bp || {};
 
     const feasScore = bp?.scores?.compositeScore ?? bp?.feasibilityScore ?? (bp?.scores?.technicalFeasibility ? Math.round((bp.scores.technicalFeasibility + bp.scores.marketReadiness + bp.scores.regulatoryRisk + bp.scores.competitiveAdvantage + bp.scores.executionComplexity) / 5) : 0);
-    const feasColor = feasScore >= 70 ? 'var(--color-emerald)' : feasScore >= 50 ? 'var(--color-primary)' : 'var(--color-rose)';
 
     return (
         <div style={{ maxWidth: '1200px', margin: '0 auto', padding: '48px 24px 80px' }}>
@@ -52,7 +54,7 @@ export default function DashboardPage() {
                             {bp?.startupName || idea?.title || 'Untitled'}
                         </h1>
                         <p style={{ fontWeight: 800, fontSize: '1.15rem', background: 'var(--color-primary)', display: 'inline-block', padding: '6px 14px', border: 'var(--border-width) solid var(--color-border)', transform: 'rotate(-1deg)', boxShadow: '4px 4px 0px 0px var(--shadow-color)' }}>
-                            "{bp?.tagline || idea?.tagline}"
+                            &quot;{bp?.tagline || idea?.tagline}&quot;
                         </p>
                     </div>
 
@@ -71,7 +73,7 @@ export default function DashboardPage() {
                 {feasScore > 0 && <span className="badge badge-blue" style={{ boxShadow: '3px 3px 0px 0px var(--shadow-color)', padding: '8px 14px', fontSize: '0.9rem' }}>Score: {feasScore}/100</span>}
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', alignItems: 'start' }}>
+            <div className="blueprint-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '24px', alignItems: 'start' }}>
                 
                 {/* Left Column: Adversarial Personas */}
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -86,7 +88,7 @@ export default function DashboardPage() {
                                 </div>
                             </div>
                             <div style={{ padding: '24px', background: 'var(--color-surface)' }}>
-                                <p style={{ fontSize: '1.1rem', fontWeight: 700, lineHeight: '1.8', fontStyle: 'italic', borderLeft: '4px solid var(--color-border)', paddingLeft: '20px' }}>"{bp.summary}"</p>
+                                <p style={{ fontSize: '1.1rem', fontWeight: 700, lineHeight: '1.8', fontStyle: 'italic', borderLeft: '4px solid var(--color-border)', paddingLeft: '20px' }}>&quot;{bp.summary}&quot;</p>
                             </div>
                         </div>
                     )}
@@ -103,10 +105,10 @@ export default function DashboardPage() {
                             </div>
                             <div style={{ padding: '24px', background: 'var(--color-surface)' }}>
                                 <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                    {adv.theReaper.map((r: any, i: number) => (
+                                    {adv.theReaper.map((r: { point?: string; reason?: string } | string, i: number) => (
                                         <li key={i} style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
                                             <span style={{ color: '#ef4444', fontSize: '1.2rem', fontWeight: 900, marginTop: '-2px' }}>✖</span>
-                                            <p style={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.6 }}>{r.point || r.reason || r}</p>
+                                            <p style={{ fontSize: '1rem', fontWeight: 700, lineHeight: 1.6 }}>{typeof r === 'string' ? r : (r.point || r.reason || '')}</p>
                                         </li>
                                     ))}
                                 </ul>
@@ -126,9 +128,9 @@ export default function DashboardPage() {
                             </div>
                             <div style={{ padding: '24px', background: 'var(--color-surface)' }}>
                                 <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                    {adv.thePainMiner.map((p: any, i: number) => (
+                                    {adv.thePainMiner.map((p: { frustration?: string; pain?: string } | string, i: number) => (
                                         <li key={i} style={{ padding: '12px 16px', background: 'var(--color-bg)', border: '2px solid var(--color-border)', borderRadius: 'var(--border-radius)', boxShadow: '2px 2px 0px 0px var(--shadow-color)' }}>
-                                            <p style={{ fontSize: '0.95rem', fontWeight: 700, lineHeight: 1.5 }}>"{p.frustration || p.pain || p}"</p>
+                                            <p style={{ fontSize: '0.95rem', fontWeight: 700, lineHeight: 1.5 }}>&quot;{(p as { frustration?: string; pain?: string }).frustration || (p as { pain?: string }).pain || String(p)}&quot;</p>
                                         </li>
                                     ))}
                                 </ul>
@@ -147,8 +149,8 @@ export default function DashboardPage() {
                             </div>
                             <div style={{ padding: '24px', background: 'var(--color-surface)' }}>
                                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '16px' }}>
-                                    {['starter', 'pro', 'enterprise'].map((tier, idx) => {
-                                        const tierData = adv.pricingArchitect[tier];
+                                    {(['starter', 'pro', 'enterprise'] as const).map((tier, idx) => {
+                                        const tierData = adv.pricingArchitect?.[tier];
                                         if (!tierData) return null;
                                         return (
                                             <div key={tier} style={{ padding: '16px', background: idx === 1 ? 'var(--color-primary)' : 'var(--color-bg)', border: 'var(--border-width) solid var(--color-border)', borderRadius: 'var(--border-radius)', boxShadow: '4px 4px 0px 0px var(--shadow-color)' }}>
@@ -194,7 +196,7 @@ export default function DashboardPage() {
                         <div style={{ padding: '20px', background: 'var(--color-surface)' }}>
                             {(adv.researchSources && adv.researchSources.length > 0) ? (
                                 <ul style={{ listStyle: 'none', display: 'flex', flexDirection: 'column', gap: '16px' }}>
-                                    {adv.researchSources.map((source: any, i: number) => (
+                                    {adv.researchSources.map((source: { url: string; title?: string }, i: number) => (
                                         <li key={i}>
                                             <a href={source.url} target="_blank" rel="noopener noreferrer" style={{ display: 'block', padding: '12px', background: 'var(--color-bg)', border: '2px solid var(--color-border)', borderRadius: 'var(--border-radius)', textDecoration: 'none', color: 'var(--color-text-1)', boxShadow: '2px 2px 0px 0px var(--shadow-color)', transition: 'transform 0.1s' }} onMouseOver={e => e.currentTarget.style.transform = 'translate(-2px, -2px)'} onMouseOut={e => e.currentTarget.style.transform = 'translate(0,0)'}>
                                                 <p style={{ fontSize: '0.82rem', fontWeight: 800, marginBottom: '4px', textTransform: 'uppercase', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{source.title || new URL(source.url).hostname}</p>

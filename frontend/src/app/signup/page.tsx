@@ -21,8 +21,8 @@ export default function SignupPage() {
             const { token, user } = await apiClient.register(form);
             login(token, user);
             router.push('/generate');
-        } catch (err: any) {
-            setError(err.message || 'Registration failed');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Registration failed');
         } finally {
             setLoading(false);
         }

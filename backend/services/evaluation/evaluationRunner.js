@@ -20,7 +20,14 @@
 
 const { analyzeIdeaBusinessBlueprint } = require('../aiService');
 const { validateSynthesizedBlueprint } = require('../councilOrchestrator');
-const { evaluateBlueprintQuality, RUBRIC_DIMENSIONS } = require('./qualityRubric');
+const {
+  evaluateBlueprintQuality,
+  RUBRIC_DIMENSIONS,
+  SHARED_DIMENSION_IDS,
+  ARCHITECTURAL_DIMENSION_IDS,
+  VALID_SCORE_MIN,
+  VALID_SCORE_MAX,
+} = require('./qualityRubric');
 const { getBenchmarkCase, createDeterministicMockGemini } = require('./benchmarkDataset');
 
 const SUPPORTED_WORKFLOWS = Object.freeze(['single_call', 'council']);
@@ -215,7 +222,10 @@ function aggregateWorkflowMetrics(runs) {
       fallbackRate: 0,
       averageModelCalls: 0,
       averageQualityByDimension: {},
+      overallSharedAverageQuality: null,
+      averageArchitecturalDiversity: null,
       overallAverageQuality: null,
+      legacyOverallAverageQuality: null,
       perCaseResults: [],
     };
   }
@@ -237,6 +247,8 @@ function aggregateWorkflowMetrics(runs) {
 
   let totalQualitySum = 0;
   let totalQualityCount = 0;
+  let totalSharedQualitySum = 0;
+  let totalSharedQualityCount = 0;
 
   for (const run of runs) {
     const qAssessment = run.qualityAssessment;
@@ -244,11 +256,16 @@ function aggregateWorkflowMetrics(runs) {
 
     for (const dim of RUBRIC_DIMENSIONS) {
       const entry = qAssessment.scores[dim.id];
-      if (entry && typeof entry.score === 'number' && Number.isFinite(entry.score)) {
+      if (entry && typeof entry.score === 'number' && Number.isFinite(entry.score) && entry.score >= VALID_SCORE_MIN && entry.score <= VALID_SCORE_MAX) {
         dimensionSums[dim.id] += entry.score;
         dimensionCounts[dim.id]++;
         totalQualitySum += entry.score;
         totalQualityCount++;
+
+        if (SHARED_DIMENSION_IDS.includes(dim.id)) {
+          totalSharedQualitySum += entry.score;
+          totalSharedQualityCount++;
+        }
       }
     }
   }
@@ -260,6 +277,17 @@ function aggregateWorkflowMetrics(runs) {
       : null;
   }
 
+  // Primary fair metric: average across the 6 shared dimensions
+  const overallSharedAverageQuality = totalSharedQualityCount > 0
+    ? Number((totalSharedQualitySum / totalSharedQualityCount).toFixed(2))
+    : null;
+
+  // Architectural diversity metric: distinctAnalyticalValue
+  const averageArchitecturalDiversity = dimensionCounts['distinctAnalyticalValue'] > 0
+    ? Number((dimensionSums['distinctAnalyticalValue'] / dimensionCounts['distinctAnalyticalValue']).toFixed(2))
+    : null;
+
+  // Legacy 7-dimension unweighted average (preserved for backward compatibility)
   const overallAverageQuality = totalQualityCount > 0
     ? Number((totalQualitySum / totalQualityCount).toFixed(2))
     : null;
@@ -271,7 +299,10 @@ function aggregateWorkflowMetrics(runs) {
     fallbackRate: Number((fallbackCount / totalRuns).toFixed(2)),
     averageModelCalls: Number((totalCalls / totalRuns).toFixed(1)),
     averageQualityByDimension,
+    overallSharedAverageQuality,
+    averageArchitecturalDiversity,
     overallAverageQuality,
+    legacyOverallAverageQuality: overallAverageQuality,
     perCaseResults: runs,
   };
 }
@@ -300,7 +331,9 @@ function formatEvaluationReport(summary) {
     `| Schema Valid Rate | ${(sc.schemaValidRate * 100).toFixed(0)}% | ${(cc.schemaValidRate * 100).toFixed(0)}% | Structural contract compliance |`,
     `| Completion Rate | ${(sc.completionRate * 100).toFixed(0)}% | ${(cc.completionRate * 100).toFixed(0)}% | Without error or fallback |`,
     `| Fallback Rate | ${(sc.fallbackRate * 100).toFixed(0)}% | ${(cc.fallbackRate * 100).toFixed(0)}% | Triggered single-call fallback |`,
-    `| Overall Quality Score | ${sc.overallAverageQuality !== null ? sc.overallAverageQuality : 'N/A'}/5.0 | ${cc.overallAverageQuality !== null ? cc.overallAverageQuality : 'N/A'}/5.0 | Average across assessed rubric dimensions |`,
+    `| Shared Quality Score (Fair Comparison) | ${sc.overallSharedAverageQuality !== null ? sc.overallSharedAverageQuality : 'N/A'}/5.0 | ${cc.overallSharedAverageQuality !== null ? cc.overallSharedAverageQuality : 'N/A'}/5.0 | Primary comparison: mean across 6 shared dimensions |`,
+    `| Architectural Diversity Score | ${sc.averageArchitecturalDiversity !== null ? sc.averageArchitecturalDiversity : 'N/A'}/5.0 | ${cc.averageArchitecturalDiversity !== null ? cc.averageArchitecturalDiversity : 'N/A'}/5.0 | Structural persona specialization (distinctAnalyticalValue) |`,
+    `| Legacy Overall Average (7-dimension) | ${sc.overallAverageQuality !== null ? sc.overallAverageQuality : 'N/A'}/5.0 | ${cc.overallAverageQuality !== null ? cc.overallAverageQuality : 'N/A'}/5.0 | Legacy unweighted average across all 7 dimensions |`,
     '',
     `> [!NOTE]`,
     `> ${operationalTradeoff.latencyNote}`,
@@ -309,6 +342,9 @@ function formatEvaluationReport(summary) {
     '',
     '## 2. Quality Dimension Averages (1–5 scale)',
     '',
+    '> [!NOTE]',
+    '> **Fair Comparison Notice**: The primary metric for comparative analytical quality is **Shared Quality Score**, calculated across the 6 shared dimensions. **Distinct Analytical Value** measures structural persona specialization and divergence; it is reported as an architectural diversity metric and excluded from the shared quality average.',
+    '',
     '| Dimension | Single-Call | Council | Rubric Focus |',
     '| :--- | :---: | :---: | :--- |',
   ];
@@ -316,7 +352,8 @@ function formatEvaluationReport(summary) {
   for (const dim of RUBRIC_DIMENSIONS) {
     const scScore = sc.averageQualityByDimension[dim.id] !== null ? sc.averageQualityByDimension[dim.id] : 'Unassessed';
     const ccScore = cc.averageQualityByDimension[dim.id] !== null ? cc.averageQualityByDimension[dim.id] : 'Unassessed';
-    lines.push(`| **${dim.label}** | ${scScore} | ${ccScore} | ${dim.description} |`);
+    const typeTag = SHARED_DIMENSION_IDS.includes(dim.id) ? '[Shared]' : '[Architectural Diversity]';
+    lines.push(`| **${dim.label}** | ${scScore} | ${ccScore} | ${typeTag} ${dim.description} |`);
   }
 
   lines.push('');
@@ -328,8 +365,8 @@ function formatEvaluationReport(summary) {
     const ccCase = cc.perCaseResults[i];
     lines.push(`### Case ${i + 1}: ${scCase?.caseName || scCase?.caseId}`);
     lines.push('');
-    lines.push(`- **Single-Call**: Calls: ${scCase?.modelCallCount}, Valid: ${scCase?.schemaValid}, Quality Avg: ${scCase?.qualityAssessment?.averageScore || 'N/A'}`);
-    lines.push(`- **Council**: Calls: ${ccCase?.modelCallCount}, Valid: ${ccCase?.schemaValid}, Fallback: ${ccCase?.fallbackUsed}, Quality Avg: ${ccCase?.qualityAssessment?.averageScore || 'N/A'}`);
+    lines.push(`- **Single-Call**: Calls: ${scCase?.modelCallCount}, Valid: ${scCase?.schemaValid}, Shared Quality: ${scCase?.qualityAssessment?.sharedAverageScore ?? 'N/A'}, Diversity: ${scCase?.qualityAssessment?.architecturalDiversityScore ?? 'N/A'} (Legacy 7-dim: ${scCase?.qualityAssessment?.averageScore ?? 'N/A'})`);
+    lines.push(`- **Council**: Calls: ${ccCase?.modelCallCount}, Valid: ${ccCase?.schemaValid}, Fallback: ${ccCase?.fallbackUsed}, Shared Quality: ${ccCase?.qualityAssessment?.sharedAverageScore ?? 'N/A'}, Diversity: ${ccCase?.qualityAssessment?.architecturalDiversityScore ?? 'N/A'} (Legacy 7-dim: ${ccCase?.qualityAssessment?.averageScore ?? 'N/A'})`);
     lines.push('');
   }
 

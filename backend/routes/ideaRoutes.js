@@ -100,7 +100,7 @@ router.post('/strategic-directions', authMiddleware, async (req, res) => {
 // POST /api/analyze-idea
 router.post('/analyze-idea', authMiddleware, async (req, res) => {
     try {
-        const { ideaSessionId, selectedIdea, strategicDirection, userElaboration } = req.body;
+        const { ideaSessionId, selectedIdea, strategicDirection, userElaboration, useCouncil } = req.body;
         if (!ideaSessionId || !selectedIdea) {
             return res.status(400).json({ error: 'ideaSessionId and selectedIdea are required' });
         }
@@ -116,7 +116,13 @@ router.post('/analyze-idea', authMiddleware, async (req, res) => {
                 .run(JSON.stringify(strategicDirection), ideaSessionId);
         }
 
-        // Perform the single unified analysis
+        // Determine whether to invoke the four-persona Council:
+        // Configurable via request body or USE_COUNCIL environment variable (defaults to true in production/demo)
+        const shouldRunCouncil = useCouncil !== undefined
+            ? Boolean(useCouncil)
+            : process.env.USE_COUNCIL !== 'false';
+
+        // Perform the unified analysis
         const blueprint = await analyzeIdeaBusinessBlueprint(
             selectedIdea,
             skills,
@@ -125,7 +131,8 @@ router.post('/analyze-idea', authMiddleware, async (req, res) => {
             experience_level,
             strategicDirection || null,
             userElaboration || session.user_elaboration || null,
-            ideaSessionId
+            ideaSessionId,
+            { useCouncil: shouldRunCouncil }
         );
 
         // Compute composite feasibility score from AI sub-scores using scoringEngine
@@ -172,13 +179,21 @@ router.post('/analyze-idea', authMiddleware, async (req, res) => {
         const monetizationData = JSON.stringify(blueprint.monetization);
         const roadmapData = JSON.stringify(blueprint.roadmap);
 
-        // Agentic V2 Adversarial data
+        // Agentic V2 Adversarial data — preserve complete blueprint fields including metadata and personas
         const adversarialData = JSON.stringify({
-             theReaper: blueprint.theReaper,
-             thePainMiner: blueprint.thePainMiner,
-             pricingArchitect: blueprint.pricingArchitect,
-             thePivotMaster: blueprint.thePivotMaster,
-             researchSources: blueprint.researchSources
+             startupName: blueprint.startupName || null,
+             tagline: blueprint.tagline || null,
+             summary: blueprint.summary || null,
+             scores: blueprint.scores || null,
+             feasibilityScore: blueprint.feasibilityScore ?? null,
+             theReaper: blueprint.theReaper || null,
+             thePainMiner: blueprint.thePainMiner || null,
+             pricingArchitect: blueprint.pricingArchitect || null,
+             thePivotMaster: blueprint.thePivotMaster || null,
+             researchSources: blueprint.researchSources || [],
+             ragGrounded: blueprint.ragGrounded || false,
+             ragDiagnostics: blueprint.ragDiagnostics || null,
+             councilDiagnostics: blueprint.councilDiagnostics || null,
         });
 
         if (existing) {
@@ -252,6 +267,37 @@ router.get('/ideas/:id', authMiddleware, (req, res) => {
         if (!idea) return res.status(404).json({ error: 'Idea not found' });
 
         const analysis = db.prepare('SELECT * FROM analysis_results WHERE idea_id = ?').get(idea.id);
+        let parsedAnalysis = null;
+
+        if (analysis) {
+            const parsedAdversarial = JSON.parse(analysis.adversarial || 'null') || {};
+            const parsedFeasibility = JSON.parse(analysis.feasibility || 'null') || {};
+
+            parsedAnalysis = {
+                ...analysis,
+                market: JSON.parse(analysis.market || 'null'),
+                competitors: JSON.parse(analysis.competitors || 'null'),
+                feasibility: parsedFeasibility,
+                tech_stack: JSON.parse(analysis.tech_stack || 'null'),
+                monetization: JSON.parse(analysis.monetization || 'null'),
+                roadmap: JSON.parse(analysis.roadmap || 'null'),
+                adversarial: parsedAdversarial,
+                // Top-level blueprint parity fields for saved blueprint view
+                startupName: parsedAdversarial.startupName || null,
+                tagline: parsedAdversarial.tagline || null,
+                summary: parsedAdversarial.summary || null,
+                scores: parsedAdversarial.scores || parsedFeasibility.scores || null,
+                feasibilityScore: parsedAdversarial.feasibilityScore ?? parsedFeasibility.feasibilityScore ?? null,
+                theReaper: parsedAdversarial.theReaper || null,
+                thePainMiner: parsedAdversarial.thePainMiner || null,
+                pricingArchitect: parsedAdversarial.pricingArchitect || null,
+                thePivotMaster: parsedAdversarial.thePivotMaster || null,
+                researchSources: parsedAdversarial.researchSources || [],
+                ragGrounded: parsedAdversarial.ragGrounded || false,
+                ragDiagnostics: parsedAdversarial.ragDiagnostics || null,
+                councilDiagnostics: parsedAdversarial.councilDiagnostics || null,
+            };
+        }
 
         res.json({
             idea: {
@@ -259,18 +305,10 @@ router.get('/ideas/:id', authMiddleware, (req, res) => {
                 idea_data: JSON.parse(idea.idea_data),
                 selected_idea: idea.selected_idea ? JSON.parse(idea.selected_idea) : null,
             },
-            analysis: analysis ? {
-                ...analysis,
-                market: JSON.parse(analysis.market || 'null'),
-                competitors: JSON.parse(analysis.competitors || 'null'),
-                feasibility: JSON.parse(analysis.feasibility || 'null'),
-                tech_stack: JSON.parse(analysis.tech_stack || 'null'),
-                monetization: JSON.parse(analysis.monetization || 'null'),
-                roadmap: JSON.parse(analysis.roadmap || 'null'),
-                adversarial: JSON.parse(analysis.adversarial || 'null'),
-            } : null,
+            analysis: parsedAnalysis,
         });
     } catch (err) {
+        console.error('Fetch idea error:', err);
         res.status(500).json({ error: 'Failed to fetch idea' });
     }
 });
