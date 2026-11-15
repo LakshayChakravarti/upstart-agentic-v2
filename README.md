@@ -410,6 +410,43 @@ erDiagram
 
 Built with **Next.js 16** (App Router) and **React 19**, the user interface uses a high-contrast **Neo-Brutalist design language**: bold black borders (`var(--border-width)`), vibrant accent palettes, offset box shadows (`var(--shadow-color)`), and dynamic typography powered by `next/font/google` (`Inter`).
 
+### Live Application Walkthrough & Screenshots
+
+#### 1. Landing Page & Interactive Walkthrough
+The public homepage presents the core incubator value proposition, live architecture highlights, interactive council breakdowns, and direct call-to-actions.
+
+![Upstart Landing Hero](docs/screenshots/01_landing_hero.png)
+*Figure 1: Production landing hero screen with live status pills and direct venture incubation CTA.*
+
+![Upstart Features & Value Pillars](docs/screenshots/01b_landing_features.png)
+*Figure 2: Neo-Brutalist feature showcase illustrating the multi-agent council and vector retrieval capabilities.*
+
+#### 2. Founder Profile & Idea Intake Interface
+Founders input target domains, technical/business skills, weekly available bandwidth, budget tier, experience level, and target demographics.
+
+![Idea Submission Interface](docs/screenshots/02_idea_submission.png)
+*Figure 3: Interactive founder intake interface with multi-select skills and capital bracket allocation.*
+
+#### 3. Saved Analyses & History Repository
+Persisted venture analyses with feasibility scores, category badges, generation dates, and direct links to full blueprint dossiers.
+
+![Saved Analyses Repository](docs/screenshots/03_saved_history.png)
+*Figure 4: Saved ventures dashboard displaying indexed venture sessions, composite ratings, and inspection triggers.*
+
+#### 4. Adversarial Council Analysis & Specialist Personas
+The Chairman synthesis dashboard integrates the findings of the four adversarial council agents against live web citations.
+
+![Council Blueprint Header & Pitch](docs/screenshots/04_council_overview.png)
+*Figure 5: Live venture blueprint overview featuring quantitative feasibility grading, elevator pitch, and print export.*
+
+![The Reaper and The Pain Miner](docs/screenshots/05_council_specialists_reaper_pain.png)
+*Figure 6: Adversarial evaluations from The Reaper (fatal structural flaws) and The Pain Miner (excavated customer friction).*
+
+![The Pricing Architect and The Pivot Master](docs/screenshots/06_council_pricing_pivot.png)
+*Figure 7: Strategic outputs from The Pricing Architect (unit-economic tiers) and The Pivot Master (asymmetric wedge).*
+
+### Frontend Directory Structure
+
 ```
 frontend/src/
 ├── app/
