@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { apiClient, type Idea } from '@/lib/api';
+import { type Idea } from '@/lib/api';
 
 export default function IdeasPage() {
     const { user, loading: authLoading } = useAuth();
@@ -10,7 +10,7 @@ export default function IdeasPage() {
     const [ideas, setIdeas] = useState<Idea[]>([]);
     const [ideaSessionId, setIdeaSessionId] = useState<number | null>(null);
     const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
-    const [error, setError] = useState('');
+    const [_error] = useState('');
     const [ready, setReady] = useState(false);
 
     useEffect(() => {
@@ -27,9 +27,12 @@ export default function IdeasPage() {
                 router.push('/generate');
                 return;
             }
-            setIdeas(parsedIdeas);
-            setIdeaSessionId(data.ideaSessionId);
-            setReady(true);
+            const timer = setTimeout(() => {
+                setIdeas(parsedIdeas);
+                setIdeaSessionId(data.ideaSessionId);
+                setReady(true);
+            }, 0);
+            return () => clearTimeout(timer);
         } catch {
             router.push('/generate');
         }
@@ -102,7 +105,7 @@ export default function IdeasPage() {
                                 <span className="badge badge-purple" style={{ transform: 'rotate(2deg)' }}>✓ Selected</span>
                             )}
                         </div>
-                        <p style={{ fontSize: '1rem', color: 'var(--color-text-1)', fontStyle: 'italic', marginBottom: '16px', fontWeight: 600, borderLeft: '4px solid var(--color-border)', paddingLeft: '12px' }}>"{idea.tagline}"</p>
+                        <p style={{ fontSize: '1rem', color: 'var(--color-text-1)', fontStyle: 'italic', marginBottom: '16px', fontWeight: 600, borderLeft: '4px solid var(--color-border)', paddingLeft: '12px' }}>&quot;{idea.tagline}&quot;</p>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
                             <div style={{ background: 'var(--color-bg)', padding: '12px', border: '2px solid var(--color-border)', borderRadius: 'var(--border-radius)' }}>
                                 <p style={{ fontSize: '0.8rem', color: 'var(--color-text-1)', fontWeight: 900, marginBottom: '6px', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Problem</p>
@@ -121,12 +124,12 @@ export default function IdeasPage() {
                 ))}
             </div>
 
-            {error && (
+            {_error && (
                 <div style={{
                     background: 'var(--color-error)', border: 'var(--border-width) solid var(--color-border)',
                     borderRadius: 'var(--border-radius)', padding: '12px 16px', marginBottom: '20px', color: '#000000', fontSize: '0.95rem', fontWeight: 800,
                     boxShadow: '4px 4px 0px 0px var(--shadow-color)'
-                }}>⚠ {error}</div>
+                }}>⚠ {_error}</div>
             )}
 
             <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>

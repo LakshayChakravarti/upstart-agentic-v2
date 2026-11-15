@@ -20,8 +20,8 @@ export default function LoginPage() {
             const { token, user } = await apiClient.login(form);
             login(token, user);
             router.push('/generate');
-        } catch (err: any) {
-            setError(err.message || 'Login failed');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Login failed');
         } finally {
             setLoading(false);
         }

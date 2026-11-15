@@ -91,8 +91,8 @@ export default function EvolvePage() {
             const result = await apiClient.checkIdeaViability({ ideaSessionId, selectedIdea });
             setViability(result.viabilityResult);
             setPhase(PHASE.VIABILITY);
-        } catch (err: any) {
-            setError(err.message || 'Failed to analyze idea viability.');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to analyze idea viability.');
         } finally {
             setViabilityLoading(false);
         }
@@ -114,8 +114,8 @@ export default function EvolvePage() {
             setExpandedIdea(result.expandedIdea);
             setPhase(PHASE.EXPANSION);
             setRefinementCount(prev => prev + 1);
-        } catch (err: any) {
-            setError(err.message || 'Failed to expand idea. Please try again.');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to expand idea. Please try again.');
         } finally {
             setExpandLoading(false);
         }
@@ -145,8 +145,8 @@ export default function EvolvePage() {
             });
             setExpandedIdea(result.expandedIdea);
             setRefinementCount(prev => prev + 1);
-        } catch (err: any) {
-            setError(err.message || 'Failed to refine idea. Please try again.');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to refine idea. Please try again.');
         } finally {
             setExpandLoading(false);
         }
@@ -166,8 +166,8 @@ export default function EvolvePage() {
             });
             setDirections(result.directions);
             setPhase(PHASE.DIRECTIONS);
-        } catch (err: any) {
-            setError(err.message || 'Failed to generate strategic directions. Please try again.');
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : 'Failed to generate strategic directions. Please try again.');
         } finally {
             setDirectionsLoading(false);
         }
@@ -202,11 +202,11 @@ export default function EvolvePage() {
             clearTimeout(timeoutTimer.current!);
             sessionStorage.setItem('upstart_analysis', JSON.stringify(result));
             router.push('/dashboard');
-        } catch (err: any) {
+        } catch (err: unknown) {
             clearInterval(phaseTimer.current!);
             clearTimeout(timeoutTimer.current!);
             setPhase(PHASE.EXPANSION);
-            setError(err.message || 'Failed to analyze idea. Please try again.');
+            setError(err instanceof Error ? err.message : 'Failed to analyze idea. Please try again.');
         } finally {
             setAnalysisLoading(false);
         }
@@ -242,11 +242,11 @@ export default function EvolvePage() {
             clearTimeout(timeoutTimer.current!);
             sessionStorage.setItem('upstart_analysis', JSON.stringify(result));
             router.push('/dashboard');
-        } catch (err: any) {
+        } catch (err: unknown) {
             clearInterval(phaseTimer.current!);
             clearTimeout(timeoutTimer.current!);
             setPhase(PHASE.DIRECTIONS);
-            setError(err.message || 'Failed to analyze idea. Please try again.');
+            setError(err instanceof Error ? err.message : 'Failed to analyze idea. Please try again.');
         } finally {
             setAnalysisLoading(false);
         }
@@ -305,7 +305,7 @@ export default function EvolvePage() {
                 }}>
                     <p style={{ fontSize: '0.72rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '6px', color: 'var(--color-text-3)' }}>📌 Selected Idea</p>
                     <h3 style={{ fontWeight: 900, fontSize: '1.1rem', textTransform: 'uppercase', marginBottom: '4px' }}>{selectedIdea.title}</h3>
-                    <p style={{ fontStyle: 'italic', fontWeight: 600, color: 'var(--color-text-2)', fontSize: '0.9rem' }}>"{selectedIdea.tagline}"</p>
+                    <p style={{ fontStyle: 'italic', fontWeight: 600, color: 'var(--color-text-2)', fontSize: '0.9rem' }}>&quot;{selectedIdea.tagline}&quot;</p>
                 </div>
             )}
 
@@ -514,7 +514,7 @@ export default function EvolvePage() {
                                     <p style={{ fontSize: '0.72rem', fontWeight: 900, textTransform: 'uppercase', marginBottom: '6px', color: 'var(--color-text-3)' }}>Previous feedback:</p>
                                     {commentHistory.map((c, i) => (
                                         <div key={i} style={{ padding: '8px 12px', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 'var(--border-radius)', marginBottom: '4px', fontSize: '0.82rem', fontWeight: 600, fontStyle: 'italic' }}>
-                                            #{i + 1}: "{c}"
+                                            #{i + 1}: &quot;{c}&quot;
                                         </div>
                                     ))}
                                 </div>

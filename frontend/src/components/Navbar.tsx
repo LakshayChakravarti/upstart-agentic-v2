@@ -13,23 +13,6 @@ export default function Navbar() {
         router.push('/');
     };
 
-    // Define common style for nav links
-    const navLinkStyle = {
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: '6px',
-        color: 'var(--color-text-1)',
-        textDecoration: 'none',
-        padding: '8px 12px',
-        borderRadius: 'var(--border-radius)',
-        fontSize: '0.9rem',
-        fontWeight: 800,
-        textTransform: 'uppercase' as const,
-        letterSpacing: '0.05em',
-        transition: 'all 0.1s',
-        border: 'var(--border-width) solid transparent',
-    };
-
     return (
         <nav className="no-print" style={{
             position: 'sticky', top: 0, zIndex: 100,

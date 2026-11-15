@@ -3,11 +3,20 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 
+const { validateJwtSecret } = require('./middleware/auth');
 const authRoutes = require('./routes/authRoutes');
 const ideaRoutes = require('./routes/ideaRoutes');
 
+// Validate production secrets safely at server startup
+validateJwtSecret();
+
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Warn if FRONTEND_URL is not configured in production
+if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL) {
+    console.warn('⚠️  [CORS] WARNING: FRONTEND_URL is not set in production. Defaulting to http://localhost:3000; cross-origin requests from remote frontends will be blocked.');
+}
 
 // Middleware
 app.use(helmet());

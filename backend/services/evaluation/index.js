@@ -7,6 +7,8 @@
  */
 
 const {
+  BENCHMARK_DATASET_VERSION,
+  HISTORICAL_PILOT_CASE_IDS,
   BENCHMARK_CASES,
   getBenchmarkCase,
   getAllBenchmarkCases,
@@ -15,6 +17,8 @@ const {
 
 const {
   RUBRIC_DIMENSIONS,
+  SHARED_DIMENSION_IDS,
+  ARCHITECTURAL_DIMENSION_IDS,
   VALID_SCORE_MIN,
   VALID_SCORE_MAX,
   isValidScore,
@@ -30,7 +34,9 @@ const {
 } = require('./evaluationRunner');
 
 module.exports = {
-  // Benchmark Cases
+  // Benchmark Dataset & Versioning
+  BENCHMARK_DATASET_VERSION,
+  HISTORICAL_PILOT_CASE_IDS,
   BENCHMARK_CASES,
   getBenchmarkCase,
   getAllBenchmarkCases,
@@ -38,6 +44,8 @@ module.exports = {
 
   // Rubric
   RUBRIC_DIMENSIONS,
+  SHARED_DIMENSION_IDS,
+  ARCHITECTURAL_DIMENSION_IDS,
   VALID_SCORE_MIN,
   VALID_SCORE_MAX,
   isValidScore,

@@ -2,7 +2,6 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { useAuth } from '@/context/AuthContext';
-import { useRouter } from 'next/navigation';
 
 const features = [
   { icon: '💡', title: 'AI Idea Generation', desc: 'Get 3 tailored startup ideas or go with your own plan — based on domain, skills, and budget.' },
@@ -31,7 +30,6 @@ const stats = [
 
 export default function LandingPage() {
   const { user } = useAuth();
-  const router = useRouter();
 
   return (
     <div style={{ minHeight: 'calc(100vh - 64px)' }}>
@@ -203,7 +201,7 @@ export default function LandingPage() {
               Ready to evolve your next big idea?
             </h2>
             <p style={{ color: 'var(--color-surface)', marginBottom: '32px', fontSize: '1.15rem', fontWeight: 800, lineHeight: 1.6, textShadow: '1px 1px 0px #000' }}>
-              Join builders who use Upstart's iterative AI feedback loop to plan smarter and execute with confidence.
+              Join builders who use Upstart&apos;s iterative AI feedback loop to plan smarter and execute with confidence.
             </p>
             <Link href={user ? '/generate' : '/signup'} className="btn-primary" style={{ fontSize: '1.1rem', padding: '16px 40px', background: 'var(--color-primary)', display: 'inline-block', color: 'var(--color-text-1)', boxShadow: '4px 4px 0px 0px #000' }}>
               🚀 Start for Free

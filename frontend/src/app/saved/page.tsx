@@ -29,8 +29,8 @@ export default function SavedPage() {
         try {
             await apiClient.deleteIdea(ideaId);
             setIdeas(prev => prev.filter(i => i.id !== ideaId));
-        } catch (err: any) {
-            alert(err.message || 'Failed to delete idea');
+        } catch (err: unknown) {
+            alert(err instanceof Error ? err.message : 'Failed to delete idea');
         } finally {
             setDeletingId(null);
         }
@@ -67,7 +67,7 @@ export default function SavedPage() {
                     <div style={{ fontSize: '4rem', marginBottom: '16px', filter: 'drop-shadow(4px 4px 0px #000000)' }}>🚀</div>
                     <h2 style={{ fontWeight: 900, fontSize: '1.5rem', marginBottom: '12px', color: 'var(--color-text-1)', textTransform: 'uppercase' }}>No saved ideas yet</h2>
                     <p style={{ color: 'var(--color-text-1)', marginBottom: '32px', fontSize: '1.1rem', fontWeight: 600 }}>
-                        Generate your first startup idea and click "Save" on the analysis dashboard.
+                        Generate your first startup idea and click &quot;Save&quot; on the analysis dashboard.
                     </p>
                     <Link href="/generate" className="btn-primary" style={{ background: 'var(--color-surface)' }}>Start Generating →</Link>
                 </div>
@@ -95,7 +95,7 @@ export default function SavedPage() {
                                         </h2>
                                     </div>
                                     <p style={{ fontSize: '0.95rem', color: 'var(--color-text-1)', marginBottom: '14px', paddingLeft: '44px', fontWeight: 600, fontStyle: 'italic' }}>
-                                        "{idea.selectedIdea?.tagline}"
+                                        &quot;{idea.selectedIdea?.tagline}&quot;
                                     </p>
                                     <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', paddingLeft: '44px' }}>
                                         <span className="badge badge-emerald" style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>📂 {idea.domain}</span>
